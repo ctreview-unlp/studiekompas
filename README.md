@@ -89,3 +89,4 @@ storage wiring — those are the next steps once this foundation is solid.
 See `Studiekompas_Phase1_Buildplan.docx` for the full scope, timeline, and
 tech stack this scaffold is built against.
 # studiekompas
+# studiekompas
