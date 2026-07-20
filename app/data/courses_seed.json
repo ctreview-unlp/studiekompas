@@ -1,0 +1,222 @@
+[
+  {
+    "name": "NLP Practitioner",
+    "category": "NLP",
+    "level": "Beginner",
+    "prerequisites": "Geen ervaring vereist.",
+    "description": "De basisopleiding NLP. Geeft een brede introductie in NLP-technieken, communicatie en persoonlijke ontwikkeling. Geschikt als startpunt voor iedereen die zich verder wil ontwikkelen op het gebied van NLP of later coach wil worden.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "NLP Practitioner Intensief",
+    "category": "NLP",
+    "level": "Beginner",
+    "prerequisites": "Geen ervaring vereist.",
+    "description": "Zelfde inhoud als de NLP Practitioner, in een intensiever tempo voor wie sneller wil doorstromen.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "NLP Practitioner Online",
+    "category": "NLP",
+    "level": "Beginner",
+    "prerequisites": "Geen ervaring vereist.",
+    "description": "De NLP Practitioner opleiding volledig online, voor wie flexibiliteit qua tijd en locatie nodig heeft.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "NLP Master Practitioner",
+    "category": "NLP",
+    "level": "Gevorderd",
+    "prerequisites": "Vereist het diploma NLP Practitioner (of aantoonbaar gelijkwaardige ervaring).",
+    "description": "Verdiepende vervolgopleiding op de NLP Practitioner, gericht op geavanceerde technieken en toepassing.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "NLP Master Practitioner Intensief",
+    "category": "NLP",
+    "level": "Gevorderd",
+    "prerequisites": "Vereist het diploma NLP Practitioner.",
+    "description": "Intensieve variant van de NLP Master Practitioner.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "NLP Master Practitioner Online",
+    "category": "NLP",
+    "level": "Gevorderd",
+    "prerequisites": "Vereist het diploma NLP Practitioner.",
+    "description": "Online variant van de NLP Master Practitioner.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "NLP Coachopleiding",
+    "category": "Coaching",
+    "level": "Gevorderd",
+    "prerequisites": "Vereist NLP Practitioner; NLP Master Practitioner aanbevolen.",
+    "description": "Opleiding gericht op het professioneel inzetten van NLP als coach.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "NLP Trainersopleiding",
+    "category": "NLP",
+    "level": "Gevorderd",
+    "prerequisites": "Vereist NLP Master Practitioner.",
+    "description": "Opleiding voor wie zelf NLP-trainingen wil gaan geven.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "Systemisch Coachen",
+    "category": "Systemisch",
+    "level": "Gevorderd",
+    "prerequisites": "Basiservaring in coaching of NLP aanbevolen.",
+    "description": "Opleiding in systemisch werken toegepast op coachingstrajecten.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "Familieopstellingen",
+    "category": "Systemisch",
+    "level": "Beginner",
+    "prerequisites": "Geen ervaring vereist.",
+    "description": "Introductie in het werken met familieopstellingen als systemische methode.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "Familieopstellingen Verdieping",
+    "category": "Systemisch",
+    "level": "Gevorderd",
+    "prerequisites": "Vereist Familieopstellingen (basis).",
+    "description": "Verdiepende vervolgopleiding op Familieopstellingen.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "Systemisch Opsteller",
+    "category": "Systemisch",
+    "level": "Gevorderd",
+    "prerequisites": "Vereist eerdere systemische scholing.",
+    "description": "Professionele opleiding tot systemisch opsteller.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "Systemisch Werk in Organisaties",
+    "category": "Systemisch",
+    "level": "Gevorderd",
+    "prerequisites": "Basiservaring in systemisch werk aanbevolen.",
+    "description": "Toepassing van systemisch werk binnen organisaties en teams.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "Stress & Burn-out Coach",
+    "category": "Coaching",
+    "level": "Beginner",
+    "prerequisites": "Geen ervaring vereist.",
+    "description": "Opleiding gericht op het begeleiden van mensen met stress- of burn-outklachten.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "Post-HBO Coachopleiding",
+    "category": "Coaching",
+    "level": "Gevorderd",
+    "prerequisites": "HBO werk- en denkniveau.",
+    "description": "Erkende post-HBO opleiding tot professioneel coach.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "Teamcoaching",
+    "category": "Coaching",
+    "level": "Gevorderd",
+    "prerequisites": "Basiservaring in coaching aanbevolen.",
+    "description": "Opleiding gericht op het coachen van teams in plaats van individuen.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "Leiderschapscoaching",
+    "category": "Coaching",
+    "level": "Gevorderd",
+    "prerequisites": "Basiservaring in coaching aanbevolen.",
+    "description": "Opleiding gericht op het coachen van leidinggevenden en leiderschapsontwikkeling.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "Provocatief Coachen",
+    "category": "Coaching",
+    "level": "Gevorderd",
+    "prerequisites": "Basiservaring in coaching aanbevolen.",
+    "description": "Coachmethode die gebruikmaakt van humor en directheid om verandering te stimuleren.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "Neurocoach",
+    "category": "Coaching",
+    "level": "Gevorderd",
+    "prerequisites": "Basiservaring in coaching aanbevolen.",
+    "description": "Coachopleiding met een focus op inzichten uit de neurowetenschap.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  },
+  {
+    "name": "Lichaamsgericht Coachen",
+    "category": "Coaching",
+    "level": "Gevorderd",
+    "prerequisites": "Basiservaring in coaching aanbevolen.",
+    "description": "Coachopleiding waarbij lichaamsbewustzijn wordt ingezet als onderdeel van het coachproces.",
+    "price": null,
+    "duration": null,
+    "next_start_date": null,
+    "url": null
+  }
+]
