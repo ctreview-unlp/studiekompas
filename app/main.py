@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.prompts import build_system_prompt, fetch_courses
+from app.storage import get_transcript, save_transcript
 
 load_dotenv()
 
@@ -39,11 +40,6 @@ app.add_middleware(
 )
 
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-
-# In-memory conversation history, keyed by session_id.
-# Fine for demo/testing; replace with the `conversations` table before
-# this is used with real visitors (state is lost on every redeploy).
-_conversations: dict[str, list[dict]] = {}
 
 
 class ChatRequest(BaseModel):
@@ -67,7 +63,7 @@ def root():
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
-    history = _conversations.setdefault(req.session_id, [])
+    history = get_transcript(DATABASE_URL, req.session_id)
     history.append({"role": "user", "content": req.message})
 
     courses = fetch_courses(DATABASE_URL)
@@ -85,6 +81,7 @@ def chat(req: ChatRequest):
     )
 
     history.append({"role": "assistant", "content": reply_text})
+    save_transcript(DATABASE_URL, req.session_id, history)
 
     return ChatResponse(reply=reply_text)
 
