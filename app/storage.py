@@ -1,9 +1,10 @@
 """
 Conversation storage backed by Postgres.
 
-Replaces the in-memory dict that was used for early testing. Each session_id
-maps to exactly one row in `conversations`; the transcript is stored as a
-JSONB array of {role, content} objects and grows with each turn.
+Each session_id maps to exactly one row in `conversations`; the transcript
+is stored as a JSONB array of {role, content} objects and grows with each
+turn. Consent is recorded separately, since it can happen before any
+message has been exchanged.
 """
 
 import psycopg
@@ -34,6 +35,23 @@ def save_transcript(database_url: str, session_id: str, transcript: list[dict]) 
                     transcript = EXCLUDED.transcript;
                 """,
                 (session_id, Json(transcript)),
+            )
+        conn.commit()
+
+
+def record_consent(database_url: str, session_id: str) -> None:
+    """Record that a visitor has given consent, before any conversation exists yet."""
+    with psycopg.connect(database_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO conversations (session_id, consent_given, consent_timestamp)
+                VALUES (%s, true, now())
+                ON CONFLICT (session_id) DO UPDATE SET
+                    consent_given = true,
+                    consent_timestamp = now();
+                """,
+                (session_id,),
             )
         conn.commit()
 

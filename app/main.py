@@ -2,9 +2,11 @@
 Studiekompas API.
 
 /api/chat calls the real Claude API using the system prompt built from
-courses currently in the database. Conversation history is kept in memory
-per session for now — swap for Postgres-backed storage (the `conversations`
-table already exists) as a next step.
+courses currently in the database. Conversation transcripts are persisted
+to Postgres (app/storage.py) instead of kept in memory.
+
+/api/consent records that a visitor accepted the data-use notice before
+any conversation starts.
 
 /demo mounts the frontend folder as static files so the widget demo page
 can be shared via a live URL instead of only running locally.
@@ -20,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.prompts import build_system_prompt, fetch_courses
-from app.storage import get_transcript, save_transcript
+from app.storage import get_transcript, save_transcript, record_consent
 
 load_dotenv()
 
@@ -51,6 +53,10 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+class ConsentRequest(BaseModel):
+    session_id: str
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -59,6 +65,12 @@ def health():
 @app.get("/")
 def root():
     return {"message": "Studiekompas API is running."}
+
+
+@app.post("/api/consent")
+def consent(req: ConsentRequest):
+    record_consent(DATABASE_URL, req.session_id)
+    return {"status": "ok"}
 
 
 @app.post("/api/chat", response_model=ChatResponse)

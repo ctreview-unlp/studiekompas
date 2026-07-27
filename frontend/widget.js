@@ -5,9 +5,13 @@
  *   <script src="widget.js"></script>
  *   <studiekompas-widget api-url="https://studiekompas-production.up.railway.app"></studiekompas-widget>
  *
- * Talks to a single backend endpoint: POST {api-url}/api/chat
- * Request:  { session_id: string, message: string }
- * Response: { reply: string }
+ * Talks to two backend endpoints:
+ *   POST {api-url}/api/consent  { session_id }              -> { status }
+ *   POST {api-url}/api/chat     { session_id, message }      -> { reply }
+ *
+ * The chat itself stays hidden behind a consent notice until the visitor
+ * explicitly accepts — no message is sent, and no conversation row is
+ * created, until that happens.
  */
 
 (function () {
@@ -124,6 +128,34 @@
         line-height: 1.5;
       }
 
+      .consent-gate {
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        flex: 1;
+      }
+      .consent-gate p {
+        font-size: 13.5px;
+        color: var(--sk-ink-soft);
+        line-height: 1.6;
+        margin: 0;
+      }
+      .consent-gate button {
+        background: var(--sk-teal);
+        color: #FAF7F2;
+        border: none;
+        border-radius: 10px;
+        padding: 11px 16px;
+        font-size: 14px;
+        font-family: inherit;
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+      .consent-gate button:hover {
+        background: var(--sk-teal-dark);
+      }
+
       .messages {
         flex: 1;
         overflow-y: auto;
@@ -185,6 +217,10 @@
         text-decoration: underline;
         cursor: pointer;
         font-family: inherit;
+      }
+      .human-request.hidden,
+      .composer.hidden {
+        display: none;
       }
 
       .composer {
@@ -259,13 +295,22 @@
         Je chat hier met een AI-assistent, geen mens. Je kunt op elk moment vragen om verder te gaan met een opleidingsadviseur.
       </div>
 
-      <div class="messages" id="messages"></div>
+      <div class="consent-gate" id="consent-gate">
+        <p>
+          Voordat we starten: dit gesprek wordt opgeslagen zodat een UNLP-opleidingsadviseur
+          je goed kan helpen. We gebruiken je gegevens alleen hiervoor en bewaren ze niet
+          langer dan nodig. Ga je hiermee akkoord?
+        </p>
+        <button id="consent-accept" type="button">Ja, ik ga akkoord</button>
+      </div>
 
-      <div class="human-request">
+      <div class="messages" id="messages" style="display: none;"></div>
+
+      <div class="human-request hidden">
         <button id="human-btn" type="button">Liever met een mens spreken?</button>
       </div>
 
-      <div class="composer">
+      <div class="composer hidden">
         <textarea id="input" rows="1" placeholder="Typ je bericht..." aria-label="Je bericht"></textarea>
         <button class="send" id="send-btn" aria-label="Verstuur bericht">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -287,6 +332,7 @@
       this.sessionId = crypto.randomUUID();
       this.isOpen = false;
       this.isSending = false;
+      this.consentGiven = false;
     }
 
     connectedCallback() {
@@ -298,10 +344,15 @@
       this.input = this.shadowRoot.querySelector("#input");
       this.sendBtn = this.shadowRoot.querySelector("#send-btn");
       this.humanBtn = this.shadowRoot.querySelector("#human-btn");
+      this.consentGate = this.shadowRoot.querySelector("#consent-gate");
+      this.consentAcceptBtn = this.shadowRoot.querySelector("#consent-accept");
+      this.composerEl = this.shadowRoot.querySelector(".composer");
+      this.humanRequestEl = this.shadowRoot.querySelector(".human-request");
 
       this.launcher.addEventListener("click", () => this.toggle());
       this.sendBtn.addEventListener("click", () => this.sendMessage());
       this.humanBtn.addEventListener("click", () => this.requestHuman());
+      this.consentAcceptBtn.addEventListener("click", () => this.acceptConsent());
       this.input.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
@@ -317,11 +368,28 @@
       this.panel.classList.toggle("open", this.isOpen);
       this.launcher.setAttribute("aria-expanded", String(this.isOpen));
 
-      if (this.isOpen && this.messagesEl.children.length === 0) {
-        this.appendMessage("bot", WELCOME_MESSAGE);
-      }
-      if (this.isOpen) {
+      if (this.isOpen && this.consentGiven) {
         this.input.focus();
+      }
+    }
+
+    async acceptConsent() {
+      this.consentGiven = true;
+      this.consentGate.style.display = "none";
+      this.messagesEl.style.display = "flex";
+      this.composerEl.classList.remove("hidden");
+      this.humanRequestEl.classList.remove("hidden");
+      this.appendMessage("bot", WELCOME_MESSAGE);
+      this.input.focus();
+
+      try {
+        await fetch(`${this.apiUrl}/api/consent`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: this.sessionId }),
+        });
+      } catch (err) {
+        console.error("Studiekompas consent recording failed:", err);
       }
     }
 
@@ -349,6 +417,8 @@
     }
 
     async sendMessage(overrideText) {
+      if (!this.consentGiven) return;
+
       const text = (overrideText ?? this.input.value).trim();
       if (!text || this.isSending) return;
 
@@ -391,14 +461,16 @@
 
     /**
      * Public helper: opens the widget (if closed) and sends a given message.
-     * Used by external "try this" prompt buttons on a demo/landing page:
-     *   document.querySelector('studiekompas-widget').askExample("...")
+     * Used by external "try this" prompt buttons on a demo/landing page.
+     * Respects the consent gate — does nothing until consent is accepted.
      */
     askExample(text) {
       if (!this.isOpen) {
         this.toggle();
       }
-      // Let the open animation + welcome message render before sending.
+      if (!this.consentGiven) {
+        return;
+      }
       setTimeout(() => this.sendMessage(text), 250);
     }
   }
