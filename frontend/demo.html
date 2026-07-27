@@ -3,46 +3,210 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Studiekompas — widget preview</title>
+  <title>Studiekompas — preview</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
+    :root {
+      --bg: #FAF7F2;
+      --ink: #26241F;
+      --ink-soft: #6B6558;
+      --teal: #1F4B4C;
+      --teal-dark: #163737;
+      --gold: #C89B3C;
+      --border: #E4DFD5;
+      --card: #FFFFFF;
+    }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: 'Inter', sans-serif;
-      background: #EFEAE0;
-      color: #26241F;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-    }
-    .placeholder-site {
-      max-width: 640px;
-      padding: 60px 40px;
-      text-align: center;
-    }
-    .placeholder-site h1 {
-      font-family: 'Fraunces', serif;
-      font-size: 32px;
-      margin-bottom: 12px;
-    }
-    .placeholder-site p {
-      color: #6B6558;
+      background: var(--bg);
+      color: var(--ink);
       line-height: 1.6;
+    }
+
+    .banner {
+      background: var(--teal-dark);
+      color: #E9E4D8;
+      font-size: 13px;
+      text-align: center;
+      padding: 9px 16px;
+      letter-spacing: 0.2px;
+    }
+
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 56px 24px 100px;
+    }
+
+    header.hero {
+      text-align: center;
+      margin-bottom: 44px;
+    }
+    .hero .kicker {
+      color: var(--gold);
+      font-size: 12.5px;
+      font-weight: 600;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .hero h1 {
+      font-family: 'Fraunces', serif;
+      font-size: 34px;
+      font-weight: 600;
+      margin: 0 0 10px;
+      color: var(--teal-dark);
+    }
+    .hero p {
+      color: var(--ink-soft);
+      font-size: 15.5px;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 26px 28px;
+      margin-bottom: 22px;
+    }
+    .card h2 {
+      font-family: 'Fraunces', serif;
+      font-size: 17px;
+      font-weight: 600;
+      margin: 0 0 14px;
+      color: var(--teal-dark);
+    }
+
+    .status-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .status-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--ink);
+    }
+    .status-list .dot {
+      flex-shrink: 0;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 6px;
+    }
+    .status-list .dot.done { background: var(--teal); }
+    .status-list .dot.next { background: var(--gold); }
+    .status-list .label-tag {
+      font-size: 11px;
+      color: var(--ink-soft);
+      margin-left: 6px;
+    }
+
+    .prompts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .prompt-chip {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--teal-dark);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 9px 14px;
+      border-radius: 100px;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+      text-align: left;
+    }
+    .prompt-chip:hover {
+      background: #EFEAE0;
+      border-color: var(--gold);
+    }
+
+    .hint {
+      text-align: center;
+      font-size: 13px;
+      color: var(--ink-soft);
+      margin-top: 8px;
+    }
+    .hint .arrow {
+      display: inline-block;
+      animation: nudge 1.6s infinite ease-in-out;
+    }
+    @keyframes nudge {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(4px, 4px); }
     }
   </style>
 </head>
 <body>
-  <div class="placeholder-site">
-    <h1>UNLP — voorbeeldpagina</h1>
-    <p>
-      Dit is een lege pagina om de Studiekompas-widget in isolatie te testen.
-      Klik rechtsonder op de cirkel om de chat te openen.
-    </p>
+  <div class="banner">
+    Interne preview van Studiekompas — nog geen definitief ontwerp, wel echte gesprekslogica.
+  </div>
+
+  <div class="wrap">
+    <header class="hero">
+      <div class="kicker">UNLP Studiekompas</div>
+      <h1>De digitale opleidingsadviseur, in actie</h1>
+      <p>
+        Dit is een werkende versie van de adviseur die straks op de UNLP-website komt.
+        De gesprekslogica hieronder is echt — geen mockup.
+      </p>
+    </header>
+
+    <div class="card">
+      <h2>Waar staan we</h2>
+      <ul class="status-list">
+        <li><span class="dot done"></span> Server en database zijn live en stabiel<span class="label-tag">klaar</span></li>
+        <li><span class="dot done"></span> Chatvenster werkt end-to-end, incl. AI-openheid en "mens spreken"-optie<span class="label-tag">klaar</span></li>
+        <li><span class="dot done"></span> Echte adviesgesprek-logica aangesloten (geen nepantwoorden meer)<span class="label-tag">klaar</span></li>
+        <li><span class="dot next"></span> Opleidingsgegevens zijn nog een voorbeeldset — wachten op de definitieve data<span class="label-tag">binnenkort</span></li>
+        <li><span class="dot next"></span> Toestemmingsscherm voor gegevensverzameling<span class="label-tag">binnenkort</span></li>
+        <li><span class="dot next"></span> Testronde met echte gebruikers<span class="label-tag">binnenkort</span></li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Probeer het gesprek</h2>
+      <div class="prompts">
+        <button class="prompt-chip" data-msg="Ik ben nieuwsgierig naar NLP maar heb nog geen ervaring">
+          "Ik ben nieuwsgierig naar NLP, geen ervaring"
+        </button>
+        <button class="prompt-chip" data-msg="Ik wil me direct inschrijven voor de NLP Trainersopleiding, ik heb geen NLP ervaring maar het komt vast goed">
+          "Ik wil direct de Trainersopleiding, zonder ervaring"
+        </button>
+        <button class="prompt-chip" data-msg="Ik twijfel tussen twee opleidingen en weet niet welke bij mij past">
+          "Ik twijfel tussen twee opleidingen"
+        </button>
+        <button class="prompt-chip" data-msg="Ik heb best wel veel stress op mijn werk en dacht dat coach worden me zou kunnen helpen">
+          "Stress op werk, dacht aan coach worden"
+        </button>
+      </div>
+      <p class="hint">Klik een voorbeeld, of open de chat zelf rechtsonder <span class="arrow">↘</span></p>
+    </div>
   </div>
 
   <script src="widget.js"></script>
-  <studiekompas-widget api-url="https://studiekompas-production.up.railway.app"></studiekompas-widget>
+  <studiekompas-widget id="widget" api-url="https://studiekompas-production.up.railway.app"></studiekompas-widget>
+
+  <script>
+    document.querySelectorAll(".prompt-chip").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const widget = document.getElementById("widget");
+        widget.askExample(btn.dataset.msg);
+      });
+    });
+  </script>
 </body>
 </html>

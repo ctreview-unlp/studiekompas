@@ -388,6 +388,19 @@
     requestHuman() {
       this.sendMessage("Ik wil graag met een mens spreken in plaats van de AI.");
     }
+
+    /**
+     * Public helper: opens the widget (if closed) and sends a given message.
+     * Used by external "try this" prompt buttons on a demo/landing page:
+     *   document.querySelector('studiekompas-widget').askExample("...")
+     */
+    askExample(text) {
+      if (!this.isOpen) {
+        this.toggle();
+      }
+      // Let the open animation + welcome message render before sending.
+      setTimeout(() => this.sendMessage(text), 250);
+    }
   }
 
   customElements.define("studiekompas-widget", StudiekompasWidget);
