@@ -398,10 +398,24 @@
       this.input.style.height = Math.min(this.input.scrollHeight, 90) + "px";
     }
 
+    /**
+     * Strip common markdown artifacts before displaying — the widget renders
+     * plain text only, but the model sometimes produces markdown regardless
+     * of the system prompt instruction not to. This is a safety net, not
+     * the primary fix (see the "Opmaak" section in app/prompts.py).
+     */
+    stripMarkdown(text) {
+      return text
+        .replace(/\*\*(.*?)\*\*/g, "$1")   // **bold** -> bold
+        .replace(/\*(.*?)\*/g, "$1")        // *italic* -> italic
+        .replace(/^#{1,6}\s*/gm, "")        // # headers -> removed
+        .replace(/^[-*]\s+/gm, "");         // - bullet / * bullet -> removed
+    }
+
     appendMessage(role, text) {
       const div = document.createElement("div");
       div.className = `msg ${role}`;
-      div.textContent = text;
+      div.textContent = role === "bot" ? this.stripMarkdown(text) : text;
       this.messagesEl.appendChild(div);
       this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
       return div;
