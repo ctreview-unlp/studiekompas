@@ -14,10 +14,10 @@ def fetch_courses(database_url: str) -> list[dict]:
     with psycopg.connect(database_url) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT name, category, level, prerequisites, description "
+                "SELECT name, category, level, prerequisites, description, upcoming_schedule "
                 "FROM courses ORDER BY category, level;"
             )
-            cols = ["name", "category", "level", "prerequisites", "description"]
+            cols = ["name", "category", "level", "prerequisites", "description", "upcoming_schedule"]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
 
 
@@ -30,6 +30,8 @@ def format_courses_block(courses: list[dict]) -> str:
             f"- {c['name']} | categorie: {c['category']} | niveau: {c['level']} "
             f"| vereisten: {c['prerequisites'] or 'geen'}\n  {c['description']}"
         )
+        if c.get("upcoming_schedule"):
+            lines.append(f"  eerstvolgende data: {c['upcoming_schedule']}")
     return "\n".join(lines)
 
 
@@ -102,8 +104,12 @@ bezoeker zelf al die duidelijkheid heeft.
 
 ## Feitelijke informatie — ALLEEN uit onderstaande bron
 Gebruik uitsluitend de opleidingsinformatie hieronder. Verzin NOOIT details over
-prijzen, data, inhoud of vereisten die hier niet in staan. Ontbreekt een detail,
-zeg dat dan expliciet en verwijs door naar een mens.
+prijzen, data, inhoud of vereisten die hier niet in staan. Sommige opleidingen
+tonen "eerstvolgende data" — gebruik dit alleen als indicatie van de eerstvolgende
+mogelijkheden, en vermeld erbij dat exacte beschikbaarheid en actuele planning
+het beste geverifieerd kan worden bij een UNLP-opleidingsadviseur, aangezien
+plekken en data kunnen wijzigen. Ontbreekt een detail (zoals prijs, datum of
+vereiste) volledig, zeg dat dan expliciet en verwijs door naar een mens — gok nooit.
 
 BESCHIKBARE OPLEIDINGEN:
 {courses_block}

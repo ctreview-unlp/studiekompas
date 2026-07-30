@@ -10,17 +10,17 @@ Usage:
     python -m app.scripts.scrape_unlp_courses            # scrape + print only
     python -m app.scripts.scrape_unlp_courses --ingest    # scrape + write to DB
 
-IMPORTANT — this was written from page content viewed through a text-extraction
-tool, not the raw HTML. The label-matching logic below is a best effort at
-guessing the real DOM structure. Run this first WITHOUT --ingest, check the
-printed output against the actual page in your browser, and tell me what's
-wrong so we can fix the selectors — don't trust it blindly on the first run.
+Two kinds of data are extracted per course:
+  1. General course info (name, prerequisites, description, duration, a
+     representative price) — via Elementor widget parsing.
+  2. Scheduled offers (date, location, trainer, price, enrollment link) —
+     via Carta's own `co-offer-*` markup, which is a separate, repeating
+     block per course (one course can have many scheduled instances).
 """
 
 import argparse
-import os
+import datetime
 import re
-import sys
 import time
 
 import requests
@@ -33,9 +33,11 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (compatible; StudiekompasBot/1.0; internal course sync)"
 }
 
-# Course URLs pulled from https://unlp.nl/al-onze-opleidingen/, organized by
-# category. Add/remove/edit as the real catalog changes — this list is the
-# only thing that should need manual updates when a new course launches.
+DUTCH_MONTHS = {
+    "januari": 1, "februari": 2, "maart": 3, "april": 4, "mei": 5, "juni": 6,
+    "juli": 7, "augustus": 8, "september": 9, "oktober": 10, "november": 11, "december": 12,
+}
+
 COURSE_URLS = {
     "NLP": [
         ("NLP Introductiedag", "https://unlp.nl/opleidingen/nlp-introductiedag/"),
@@ -106,79 +108,137 @@ COURSE_URLS = {
 
 def find_field_after_label(soup: BeautifulSoup, label: str) -> str | None:
     """
-    Elementor renders each label/value pair as two separate sibling widgets:
-
-    <div class="elementor-element ... elementor-widget-heading">   <- outer wrapper
-      <div class="elementor-widget-container">
-        <h5>Vooropleiding</h5>                                     <- the label
-      </div>
-    </div>
-    <div class="elementor-element ... elementor-widget-heading">   <- NEXT outer wrapper
-      <div class="elementor-widget-container">
-        <h5>Geen</h5>                                              <- the value
-      </div>
-    </div>
-
-    So: find the <h5> matching the label, go UP two levels to its outer
+    Elementor renders each label/value pair as two separate sibling widgets.
+    Find the <h5> matching the label, go UP two levels to its outer
     .elementor-element wrapper, then look at THAT element's next sibling
-    (not the h5's own sibling) for the value.
+    for the value.
     """
     pattern = re.compile(rf"^\s*{re.escape(label)}\s*$", re.IGNORECASE)
     label_tag = soup.find("h5", string=pattern)
     if not label_tag:
         return None
 
-    widget_container = label_tag.parent  # .elementor-widget-container
+    widget_container = label_tag.parent
     if widget_container is None:
         return None
-    outer_wrapper = widget_container.parent  # .elementor-element
+    outer_wrapper = widget_container.parent
     if outer_wrapper is None:
         return None
 
-    next_widget = outer_wrapper.find_next_sibling(
-        "div", class_="elementor-element"
-    )
+    next_widget = outer_wrapper.find_next_sibling("div", class_="elementor-element")
     if not next_widget:
         return None
 
-    # Most fields (Vooropleiding, Certificering) are a single <h5> value.
     value_h5 = next_widget.find("h5")
     if value_h5:
         return value_h5.get_text(strip=True)
 
-    # Opleidingsduur's value is longer, multi-line text (Regulier/Intensief/
-    # Online breakdown) — likely a text-editor widget, not a heading. Fall
-    # back to grabbing all text in that widget instead.
     text = next_widget.get_text(" ", strip=True)
     return text or None
 
 
 def extract_price(soup: BeautifulSoup) -> str | None:
-    """Grab the first € amount found on the page as a representative price.
-    Note: pages often list several prices (one per location/variant) —
-    this returns the first, not necessarily the cheapest or most common."""
+    """Grab the first € amount found on the page as a representative price."""
     text = soup.get_text(" ", strip=True)
     match = re.search(r"€\s?[\d.,]+", text)
     return match.group(0) if match else None
 
-def parse_price(price_str: str | None) -> float | None:
-    """
-    Convert Dutch-formatted price strings like '€ 2.750', '€2.995', '€ 995,'
-    into a plain numeric value the database can store.
 
-    Dutch formatting uses '.' as a thousands separator, not a decimal point,
-    and prices on this site never show cents — so stripping everything
-    except digits and parsing as an integer is safe here.
-    """
+def parse_price_str(price_str: str | None) -> float | None:
+    """Convert Dutch-formatted price strings into a plain numeric value."""
     if not price_str:
         return None
     digits_only = re.sub(r"[^\d]", "", price_str)
     return float(digits_only) if digits_only else None
 
 
-def scrape_course(name: str, url: str, category: str) -> dict:
-    resp = requests.get(url, headers=HEADERS, timeout=25)
-    resp.raise_for_status()
+def parse_dutch_date(s: str | None) -> datetime.date | None:
+    """Parse '7 september 2026' style strings into a real date object."""
+    if not s:
+        return None
+    parts = s.strip().split()
+    if len(parts) != 3:
+        return None
+    day_str, month_name, year_str = parts
+    month = DUTCH_MONTHS.get(month_name.lower())
+    if not month:
+        return None
+    try:
+        return datetime.date(int(year_str), month, int(day_str))
+    except ValueError:
+        return None
+
+
+def parse_offers(soup: BeautifulSoup) -> list[dict]:
+    """
+    Parse every scheduled offer (date + location + trainer + price + variant)
+    from a course page's Carta-rendered offer list (co-offer-* markup).
+    """
+    offers = []
+    for article in soup.select("article.co-offer-item"):
+        location_tag = article.select_one(".co-offer-location")
+        location = location_tag.get_text(strip=True) if location_tag else None
+
+        date_tag = article.select_one(".co-offer-next-start-date")
+        start_date = parse_dutch_date(date_tag.get_text(strip=True) if date_tag else None)
+
+        trainer_links = article.select(".co-offer-teacherlist-data a")
+        trainer = ", ".join(a.get_text(strip=True) for a in trainer_links) or None
+
+        variant_tag = article.select_one(".co-offer-priceinfo-data strong")
+        variant = variant_tag.get_text(strip=True) if variant_tag else None
+
+        price_tag = article.select_one(".co-offer-price")
+        price = parse_price_str(price_tag.get_text(strip=True) if price_tag else None)
+
+        link_tag = article.select_one("a.co-offer-register-link")
+        enrollment_url = link_tag["href"] if link_tag and link_tag.has_attr("href") else None
+
+        offers.append({
+            "location": location,
+            "start_date": start_date,
+            "trainer": trainer,
+            "variant": variant,
+            "price": price,
+            "enrollment_url": enrollment_url,
+        })
+    return offers
+
+
+def build_schedule_summary(offers: list[dict], max_items: int = 3) -> str | None:
+    """Short human-readable summary of the next few upcoming offers, for the
+    system prompt. Full detail per offer lives in course_schedules.
+
+    Formats dates with Dutch month names directly rather than relying on
+    strftime's locale (which would give English names like 'September'
+    instead of 'september' unless the system locale happens to be Dutch)."""
+    dated = [o for o in offers if o["start_date"]]
+    dated.sort(key=lambda o: o["start_date"])
+    if not dated:
+        return None
+
+    month_names_nl = {v: k for k, v in DUTCH_MONTHS.items()}
+    parts = []
+    for o in dated[:max_items]:
+        d = o["start_date"]
+        parts.append(f"{d.day} {month_names_nl[d.month]} {d.year} ({o['location']})")
+    return "; ".join(parts)
+
+
+def scrape_course(name: str, url: str, category: str, retries: int = 2) -> dict:
+    last_error = None
+    resp = None
+    for _ in range(retries):
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=25)
+            resp.raise_for_status()
+            break
+        except requests.exceptions.RequestException as e:
+            last_error = e
+            time.sleep(2)
+    else:
+        raise last_error
+
     soup = BeautifulSoup(resp.text, "html.parser")
 
     description = None
@@ -193,6 +253,9 @@ def scrape_course(name: str, url: str, category: str) -> dict:
     certification = find_field_after_label(soup, "Certificering")
     price = extract_price(soup)
 
+    offers = parse_offers(soup)
+    upcoming_schedule = build_schedule_summary(offers)
+
     level = "Beginner" if not prerequisites or prerequisites.strip().lower() == "geen" else "Gevorderd"
 
     return {
@@ -205,6 +268,8 @@ def scrape_course(name: str, url: str, category: str) -> dict:
         "duration": duration,
         "certification": certification,
         "url": url,
+        "offers": offers,
+        "upcoming_schedule": upcoming_schedule,
     }
 
 
@@ -224,13 +289,15 @@ def main():
             try:
                 data = scrape_course(name, url, category)
                 results.append(data)
-                print(f"  prerequisites: {data['prerequisites']!r}")
-                print(f"  duration:      {data['duration']!r}")
-                print(f"  price:         {data['price']!r}")
-                print(f"  description:   {(data['description'] or '')[:80]!r}...")
+                print(f"  prerequisites:      {data['prerequisites']!r}")
+                print(f"  duration:           {data['duration']!r}")
+                print(f"  price:              {data['price']!r}")
+                print(f"  upcoming_schedule:  {data['upcoming_schedule']!r}")
+                print(f"  offers found:       {len(data['offers'])}")
+                print(f"  description:        {(data['description'] or '')[:80]!r}...")
             except Exception as e:
                 print(f"  FAILED: {e}")
-            time.sleep(1)  # be polite — no need to hammer the site
+            time.sleep(1)
 
     print(f"\nScraped {len(results)} course pages.")
 
@@ -254,15 +321,15 @@ def main():
             course_ids = []
             chunk_texts = []
 
-            # First pass: upsert all course rows, collect ids + chunk text
             for course in results:
-                course["price"] = parse_price(course["price"])
+                if isinstance(course["price"], str):
+                    course["price"] = parse_price_str(course["price"])
                 cur.execute(
                     """
                     INSERT INTO courses (name, category, level, prerequisites, description,
-                                          price, duration, next_start_date, url)
+                                          price, duration, next_start_date, url, upcoming_schedule)
                     VALUES (%(name)s, %(category)s, %(level)s, %(prerequisites)s, %(description)s,
-                            %(price)s, %(duration)s, NULL, %(url)s)
+                            %(price)s, %(duration)s, NULL, %(url)s, %(upcoming_schedule)s)
                     ON CONFLICT (name) DO UPDATE SET
                         category = EXCLUDED.category,
                         level = EXCLUDED.level,
@@ -271,6 +338,7 @@ def main():
                         price = EXCLUDED.price,
                         duration = EXCLUDED.duration,
                         url = EXCLUDED.url,
+                        upcoming_schedule = EXCLUDED.upcoming_schedule,
                         updated_at = now()
                     RETURNING id;
                     """,
@@ -278,15 +346,24 @@ def main():
                 )
                 course_id = cur.fetchone()[0]
                 cur.execute("DELETE FROM course_chunks WHERE course_id = %s;", (course_id,))
+                cur.execute("DELETE FROM course_schedules WHERE course_id = %s;", (course_id,))
+
+                for offer in course.get("offers", []):
+                    cur.execute(
+                        """
+                        INSERT INTO course_schedules (course_id, location, start_date, trainer, variant, price, enrollment_url)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s);
+                        """,
+                        (course_id, offer["location"], offer["start_date"], offer["trainer"],
+                         offer["variant"], offer["price"], offer["enrollment_url"]),
+                    )
 
                 course_ids.append(course_id)
                 chunk_texts.append(build_chunk_text(course))
 
-            # Second pass: ONE batched embedding call for everything
             print(f"Embedding {len(chunk_texts)} courses in a single batch call...")
             embeddings = vo.embed(chunk_texts, model=EMBED_MODEL, input_type="document").embeddings
 
-            # Third pass: store each embedding against its course
             for course_id, chunk_text, embedding in zip(course_ids, chunk_texts, embeddings):
                 cur.execute(
                     "INSERT INTO course_chunks (course_id, chunk_text, embedding) VALUES (%s, %s, %s);",
@@ -296,6 +373,7 @@ def main():
         conn.commit()
 
     print(f"Ingested {len(results)} courses into the database.")
+
 
 if __name__ == "__main__":
     main()
