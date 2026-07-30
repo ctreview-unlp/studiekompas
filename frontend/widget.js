@@ -21,11 +21,11 @@
         --sk-bg: #FAF7F2;
         --sk-ink: #26241F;
         --sk-ink-soft: #6B6558;
-        --sk-teal: #1F4B4C;
-        --sk-teal-dark: #163737;
-        --sk-gold: #C89B3C;
+        --sk-navy: #1B2A4D;
+        --sk-navy-dark: #121D38;
+        --sk-gold: #E3993D;
         --sk-border: #E4DFD5;
-        --sk-bubble-user: #1F4B4C;
+        --sk-bubble-user: #1B2A4D;
         --sk-bubble-bot: #F1ECE2;
         all: initial;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -41,10 +41,10 @@
         width: 60px;
         height: 60px;
         border-radius: 50%;
-        background: var(--sk-teal);
+        background: var(--sk-navy);
         border: none;
         cursor: pointer;
-        box-shadow: 0 6px 20px rgba(31, 75, 76, 0.35);
+        box-shadow: 0 6px 20px rgba(27, 42, 77, 0.35);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -52,7 +52,7 @@
       }
       .launcher:hover {
         transform: scale(1.05);
-        box-shadow: 0 8px 26px rgba(31, 75, 76, 0.45);
+        box-shadow: 0 8px 26px rgba(27, 42, 77, 0.45);
       }
       .launcher svg {
         width: 28px;
@@ -90,7 +90,7 @@
       }
 
       .header {
-        background: var(--sk-teal);
+        background: var(--sk-navy);
         color: #FAF7F2;
         padding: 18px 20px;
         display: flex;
@@ -115,7 +115,7 @@
       }
       .header .titles .sub {
         font-size: 11.5px;
-        color: #CFE3E1;
+        color: #C9D0DE;
         letter-spacing: 0.2px;
       }
 
@@ -142,7 +142,7 @@
         margin: 0;
       }
       .consent-gate button {
-        background: var(--sk-teal);
+        background: var(--sk-navy);
         color: #FAF7F2;
         border: none;
         border-radius: 10px;
@@ -153,7 +153,7 @@
         transition: background 0.2s ease;
       }
       .consent-gate button:hover {
-        background: var(--sk-teal-dark);
+        background: var(--sk-navy-dark);
       }
 
       .messages {
@@ -212,7 +212,7 @@
       .human-request button {
         background: none;
         border: none;
-        color: var(--sk-teal);
+        color: var(--sk-navy);
         font-size: 12px;
         text-decoration: underline;
         cursor: pointer;
@@ -248,7 +248,7 @@
         outline-offset: 1px;
       }
       .composer button.send {
-        background: var(--sk-teal);
+        background: var(--sk-navy);
         border: none;
         color: #FAF7F2;
         border-radius: 10px;
@@ -261,7 +261,7 @@
         justify-content: center;
         transition: background 0.2s ease;
       }
-      .composer button.send:hover { background: var(--sk-teal-dark); }
+      .composer button.send:hover { background: var(--sk-navy-dark); }
       .composer button.send:disabled {
         opacity: 0.5;
         cursor: default;
@@ -275,7 +275,7 @@
     <button class="launcher" aria-label="Open Studiekompas chat" aria-expanded="false">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <circle cx="12" cy="12" r="9.25" stroke="#FAF7F2" stroke-width="1.4"/>
-        <path d="M15.5 8.5L13 13L8.5 15.5L11 11L15.5 8.5Z" fill="#C89B3C" stroke="#C89B3C" stroke-linejoin="round"/>
+        <path d="M15.5 8.5L13 13L8.5 15.5L11 11L15.5 8.5Z" fill="#E3993D" stroke="#E3993D" stroke-linejoin="round"/>
       </svg>
     </button>
 
@@ -283,7 +283,7 @@
       <div class="header">
         <svg class="compass" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="12" cy="12" r="9.25" stroke="#FAF7F2" stroke-width="1.2"/>
-          <path d="M15.5 8.5L13 13L8.5 15.5L11 11L15.5 8.5Z" fill="#C89B3C" stroke="#C89B3C" stroke-linejoin="round"/>
+          <path d="M15.5 8.5L13 13L8.5 15.5L11 11L15.5 8.5Z" fill="#E3993D" stroke="#E3993D" stroke-linejoin="round"/>
         </svg>
         <div class="titles">
           <span class="name">UNLP Studiekompas</span>
@@ -398,18 +398,12 @@
       this.input.style.height = Math.min(this.input.scrollHeight, 90) + "px";
     }
 
-    /**
-     * Strip common markdown artifacts before displaying — the widget renders
-     * plain text only, but the model sometimes produces markdown regardless
-     * of the system prompt instruction not to. This is a safety net, not
-     * the primary fix (see the "Opmaak" section in app/prompts.py).
-     */
     stripMarkdown(text) {
       return text
-        .replace(/\*\*(.*?)\*\*/g, "$1")   // **bold** -> bold
-        .replace(/\*(.*?)\*/g, "$1")        // *italic* -> italic
-        .replace(/^#{1,6}\s*/gm, "")        // # headers -> removed
-        .replace(/^[-*]\s+/gm, "");         // - bullet / * bullet -> removed
+        .replace(/\*\*(.*?)\*\*/g, "$1")
+        .replace(/\*(.*?)\*/g, "$1")
+        .replace(/^#{1,6}\s*/gm, "")
+        .replace(/^[-*]\s+/gm, "");
     }
 
     appendMessage(role, text) {
@@ -473,11 +467,6 @@
       this.sendMessage("Ik wil graag met een mens spreken in plaats van de AI.");
     }
 
-    /**
-     * Public helper: opens the widget (if closed) and sends a given message.
-     * Used by external "try this" prompt buttons on a demo/landing page.
-     * Respects the consent gate — does nothing until consent is accepted.
-     */
     askExample(text) {
       if (!this.isOpen) {
         this.toggle();
