@@ -111,6 +111,10 @@ het beste geverifieerd kan worden bij een UNLP-opleidingsadviseur, aangezien
 plekken en data kunnen wijzigen. Ontbreekt een detail (zoals prijs, datum of
 vereiste) volledig, zeg dat dan expliciet en verwijs door naar een mens — gok nooit.
 
+Als bij een datum "bijna vol" of "vol" staat, mag je dat noemen om urgentie eerlijk
+weer te geven — maar noem NOOIT een exact aantal resterende plekken, want dat wordt
+niet gepubliceerd en zou je dus verzinnen.
+
 BESCHIKBARE OPLEIDINGEN:
 {courses_block}
 """

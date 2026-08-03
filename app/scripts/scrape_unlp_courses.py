@@ -10,12 +10,16 @@ Usage:
     python -m app.scripts.scrape_unlp_courses            # scrape + print only
     python -m app.scripts.scrape_unlp_courses --ingest    # scrape + write to DB
 
-Two kinds of data are extracted per course:
+Three kinds of data are extracted per course:
   1. General course info (name, prerequisites, description, duration, a
      representative price) — via Elementor widget parsing.
   2. Scheduled offers (date, location, trainer, price, enrollment link) —
      via Carta's own `co-offer-*` markup, which is a separate, repeating
      block per course (one course can have many scheduled instances).
+  3. Availability status per offer (beschikbaar / bijna vol / vol) — read
+     from the offer's CSS status class. Note: Carta does not publish an
+     exact remaining-spot count anywhere on the public page, only this
+     three-level status, so that is the ceiling of what can be scraped.
 """
 
 import argparse
@@ -169,10 +173,29 @@ def parse_dutch_date(s: str | None) -> datetime.date | None:
         return None
 
 
+def parse_availability_status(article) -> str:
+    """
+    Read the offer's availability status from its CSS class.
+
+    Carta does not publish an exact remaining-spot count anywhere on the
+    public page — only this three-level status (co-offer-status-full,
+    co-offer-status-almostfull, or neither = normal availability). This is
+    the ceiling of what can be scraped; an exact number simply isn't there.
+    """
+    class_list = article.get("class", [])
+    if "co-offer-status-full" in class_list:
+        return "vol"
+    if "co-offer-status-almostfull" in class_list:
+        return "bijna vol"
+    return "beschikbaar"
+
+
 def parse_offers(soup: BeautifulSoup) -> list[dict]:
     """
-    Parse every scheduled offer (date + location + trainer + price + variant)
-    from a course page's Carta-rendered offer list (co-offer-* markup).
+    Parse every scheduled offer (date + location + trainer + price + variant
+    + availability) from a course page's Carta-rendered offer list
+    (co-offer-* markup). A single course page can have several of these —
+    one per scheduled date/location combination.
     """
     offers = []
     for article in soup.select("article.co-offer-item"):
@@ -194,6 +217,8 @@ def parse_offers(soup: BeautifulSoup) -> list[dict]:
         link_tag = article.select_one("a.co-offer-register-link")
         enrollment_url = link_tag["href"] if link_tag and link_tag.has_attr("href") else None
 
+        availability_status = parse_availability_status(article)
+
         offers.append({
             "location": location,
             "start_date": start_date,
@@ -201,6 +226,7 @@ def parse_offers(soup: BeautifulSoup) -> list[dict]:
             "variant": variant,
             "price": price,
             "enrollment_url": enrollment_url,
+            "availability_status": availability_status,
         })
     return offers
 
@@ -209,9 +235,9 @@ def build_schedule_summary(offers: list[dict], max_items: int = 3) -> str | None
     """Short human-readable summary of the next few upcoming offers, for the
     system prompt. Full detail per offer lives in course_schedules.
 
-    Formats dates with Dutch month names directly rather than relying on
-    strftime's locale (which would give English names like 'September'
-    instead of 'september' unless the system locale happens to be Dutch)."""
+    Includes availability status inline (e.g. "bijna vol") so the advisor
+    can mention urgency honestly without ever citing an exact spot count
+    that Carta doesn't actually publish."""
     dated = [o for o in offers if o["start_date"]]
     dated.sort(key=lambda o: o["start_date"])
     if not dated:
@@ -221,7 +247,11 @@ def build_schedule_summary(offers: list[dict], max_items: int = 3) -> str | None
     parts = []
     for o in dated[:max_items]:
         d = o["start_date"]
-        parts.append(f"{d.day} {month_names_nl[d.month]} {d.year} ({o['location']})")
+        piece = f"{d.day} {month_names_nl[d.month]} {d.year} ({o['location']}"
+        if o.get("availability_status") and o["availability_status"] != "beschikbaar":
+            piece += f", {o['availability_status']}"
+        piece += ")"
+        parts.append(piece)
     return "; ".join(parts)
 
 
@@ -351,11 +381,13 @@ def main():
                 for offer in course.get("offers", []):
                     cur.execute(
                         """
-                        INSERT INTO course_schedules (course_id, location, start_date, trainer, variant, price, enrollment_url)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s);
+                        INSERT INTO course_schedules (course_id, location, start_date, trainer, variant,
+                                                       price, enrollment_url, availability_status)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
                         """,
                         (course_id, offer["location"], offer["start_date"], offer["trainer"],
-                         offer["variant"], offer["price"], offer["enrollment_url"]),
+                         offer["variant"], offer["price"], offer["enrollment_url"],
+                         offer["availability_status"]),
                     )
 
                 course_ids.append(course_id)
