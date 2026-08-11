@@ -14,10 +14,10 @@ def fetch_courses(database_url: str) -> list[dict]:
     with psycopg.connect(database_url) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT name, category, level, prerequisites, description, upcoming_schedule "
+                "SELECT name, category, level, prerequisites, description, price, upcoming_schedule "
                 "FROM courses ORDER BY category, level;"
             )
-            cols = ["name", "category", "level", "prerequisites", "description", "upcoming_schedule"]
+            cols = ["name", "category", "level", "prerequisites", "description", "price", "upcoming_schedule"]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
 
 
@@ -26,9 +26,10 @@ def format_courses_block(courses: list[dict]) -> str:
         return "(Geen opleidingen beschikbaar in de kennisbank op dit moment.)"
     lines = []
     for c in courses:
+        price_str = f"€ {c['price']:.0f}" if c.get("price") is not None else "onbekend"
         lines.append(
             f"- {c['name']} | categorie: {c['category']} | niveau: {c['level']} "
-            f"| vereisten: {c['prerequisites'] or 'geen'}\n  {c['description']}"
+            f"| vereisten: {c['prerequisites'] or 'geen'} | prijs: {price_str}\n  {c['description']}"
         )
         if c.get("upcoming_schedule"):
             lines.append(f"  eerstvolgende data: {c['upcoming_schedule']}")
