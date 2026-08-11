@@ -15,11 +15,11 @@ def fetch_courses(database_url: str) -> list[dict]:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT name, category, level, prerequisites, description, price, "
-                "upcoming_schedule, certification "
+                "duration, upcoming_schedule, certification "
                 "FROM courses ORDER BY category, level;"
             )
             cols = ["name", "category", "level", "prerequisites", "description", "price",
-                    "upcoming_schedule", "certification"]
+                    "duration", "upcoming_schedule", "certification"]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
 
 
@@ -33,6 +33,8 @@ def format_courses_block(courses: list[dict]) -> str:
             f"- {c['name']} | categorie: {c['category']} | niveau: {c['level']} "
             f"| vereisten: {c['prerequisites'] or 'geen'} | prijs: {price_str}\n  {c['description']}"
         )
+        if c.get("duration"):
+            lines.append(f"  duur: {c['duration']}")
         if c.get("upcoming_schedule"):
             lines.append(f"  eerstvolgende data: {c['upcoming_schedule']}")
         if c.get("certification"):
