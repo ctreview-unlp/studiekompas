@@ -42,6 +42,11 @@ DUTCH_MONTHS = {
     "juli": 7, "augustus": 8, "september": 9, "oktober": 10, "november": 11, "december": 12,
 }
 
+DUTCH_WEEKDAYS = {
+    0: "maandag", 1: "dinsdag", 2: "woensdag", 3: "donderdag",
+    4: "vrijdag", 5: "zaterdag", 6: "zondag",
+}
+
 COURSE_URLS = {
     "NLP": [
         ("NLP Introductiedag", "https://unlp.nl/opleidingen/nlp-introductiedag/"),
@@ -231,13 +236,11 @@ def parse_offers(soup: BeautifulSoup) -> list[dict]:
     return offers
 
 
-def build_schedule_summary(offers: list[dict], max_items: int = 3) -> str | None:
+def build_schedule_summary(offers: list[dict], max_items: int = 6) -> str | None:
     """Short human-readable summary of the next few upcoming offers, for the
-    system prompt. Full detail per offer lives in course_schedules.
-
-    Includes availability status inline (e.g. "bijna vol") so the advisor
-    can mention urgency honestly without ever citing an exact spot count
-    that Carta doesn't actually publish."""
+    system prompt. Includes the weekday name so the advisor can reason about
+    day-of-week questions (e.g. "which Coaching courses start on Mondays?"),
+    not just specific dates."""
     dated = [o for o in offers if o["start_date"]]
     dated.sort(key=lambda o: o["start_date"])
     if not dated:
@@ -247,7 +250,8 @@ def build_schedule_summary(offers: list[dict], max_items: int = 3) -> str | None
     parts = []
     for o in dated[:max_items]:
         d = o["start_date"]
-        piece = f"{d.day} {month_names_nl[d.month]} {d.year} ({o['location']}"
+        weekday = DUTCH_WEEKDAYS[d.weekday()]
+        piece = f"{weekday} {d.day} {month_names_nl[d.month]} {d.year} ({o['location']}"
         if o.get("availability_status") and o["availability_status"] != "beschikbaar":
             piece += f", {o['availability_status']}"
         piece += ")"
