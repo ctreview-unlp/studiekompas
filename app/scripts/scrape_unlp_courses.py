@@ -10,16 +10,12 @@ Usage:
     python -m app.scripts.scrape_unlp_courses            # scrape + print only
     python -m app.scripts.scrape_unlp_courses --ingest    # scrape + write to DB
 
-Three kinds of data are extracted per course:
-  1. General course info (name, prerequisites, description, duration, a
-     representative price) — via Elementor widget parsing.
-  2. Scheduled offers (date, location, trainer, price, enrollment link) —
-     via Carta's own `co-offer-*` markup, which is a separate, repeating
-     block per course (one course can have many scheduled instances).
-  3. Availability status per offer (beschikbaar / bijna vol / vol) — read
-     from the offer's CSS status class. Note: Carta does not publish an
-     exact remaining-spot count anywhere on the public page, only this
-     three-level status, so that is the ceiling of what can be scraped.
+Data extracted per course:
+  1. General course info (name, prerequisites, description, duration,
+     certification, a representative price) — via Elementor widget parsing.
+  2. Scheduled offers (date, location, trainer, price, enrollment link,
+     availability status, day-of-week pattern) — via Carta's own
+     `co-offer-*` markup, a repeating block per course.
 """
 
 import argparse
@@ -45,6 +41,12 @@ DUTCH_MONTHS = {
 DUTCH_WEEKDAYS = {
     0: "maandag", 1: "dinsdag", 2: "woensdag", 3: "donderdag",
     4: "vrijdag", 5: "zaterdag", 6: "zondag",
+}
+
+WEEKDAY_ABBREV_ORDER = {"ma": 0, "di": 1, "wo": 2, "do": 3, "vr": 4, "za": 5, "zo": 6}
+WEEKDAY_ABBREV_FULL = {
+    "ma": "maandag", "di": "dinsdag", "wo": "woensdag", "do": "donderdag",
+    "vr": "vrijdag", "za": "zaterdag", "zo": "zondag",
 }
 
 COURSE_URLS = {
@@ -195,12 +197,35 @@ def parse_availability_status(article) -> str:
     return "beschikbaar"
 
 
+def parse_offer_days(article) -> list[str]:
+    """
+    Extract the unique weekday names (in Mon-Sun order) this offer's actual
+    class sessions fall on, read from the offer's full planning data (every
+    individual class day, not just the first start date).
+
+    This is what lets the advisor answer "weekend variant" vs. "doordeweekse
+    variant" questions honestly, using real scraped attendance patterns
+    instead of guessing from the marketing variant name or just the first
+    start date. A course spread across Fri/Sat/Sun sessions and one spread
+    across Mon-Sat consecutive days look identical if you only look at the
+    first start date — this field is what actually distinguishes them.
+    """
+    day_spans = article.select(".co-offer-planning-data .co-offer-planning-datestartdaynameshort")
+    abbrevs_seen = []
+    for span in day_spans:
+        abbr = span.get_text(strip=True).lower()
+        if abbr and abbr not in abbrevs_seen:
+            abbrevs_seen.append(abbr)
+    abbrevs_seen.sort(key=lambda a: WEEKDAY_ABBREV_ORDER.get(a, 99))
+    return [WEEKDAY_ABBREV_FULL[a] for a in abbrevs_seen if a in WEEKDAY_ABBREV_FULL]
+
+
 def parse_offers(soup: BeautifulSoup) -> list[dict]:
     """
     Parse every scheduled offer (date + location + trainer + price + variant
-    + availability) from a course page's Carta-rendered offer list
-    (co-offer-* markup). A single course page can have several of these —
-    one per scheduled date/location combination.
+    + availability + day pattern) from a course page's Carta-rendered offer
+    list (co-offer-* markup). A single course page can have several of
+    these — one per scheduled date/location combination.
     """
     offers = []
     for article in soup.select("article.co-offer-item"):
@@ -223,6 +248,7 @@ def parse_offers(soup: BeautifulSoup) -> list[dict]:
         enrollment_url = link_tag["href"] if link_tag and link_tag.has_attr("href") else None
 
         availability_status = parse_availability_status(article)
+        lesdagen = parse_offer_days(article)
 
         offers.append({
             "location": location,
@@ -232,15 +258,19 @@ def parse_offers(soup: BeautifulSoup) -> list[dict]:
             "price": price,
             "enrollment_url": enrollment_url,
             "availability_status": availability_status,
+            "lesdagen": lesdagen,
         })
     return offers
 
 
 def build_schedule_summary(offers: list[dict], max_items: int = 6) -> str | None:
     """Short human-readable summary of the next few upcoming offers, for the
-    system prompt. Includes the weekday name so the advisor can reason about
-    day-of-week questions (e.g. "which Coaching courses start on Mondays?"),
-    not just specific dates."""
+    system prompt. Full detail per offer lives in course_schedules.
+
+    Includes the weekday pattern (lesdagen) so the advisor can correctly
+    answer "weekend variant" / "doordeweekse variant" questions using real
+    data, and includes availability status so it can mention urgency
+    honestly without ever citing an exact spot count Carta doesn't publish."""
     dated = [o for o in offers if o["start_date"]]
     dated.sort(key=lambda o: o["start_date"])
     if not dated:
@@ -254,6 +284,8 @@ def build_schedule_summary(offers: list[dict], max_items: int = 6) -> str | None
         piece = f"{weekday} {d.day} {month_names_nl[d.month]} {d.year} ({o['location']}"
         if o.get("availability_status") and o["availability_status"] != "beschikbaar":
             piece += f", {o['availability_status']}"
+        if o.get("lesdagen"):
+            piece += f", lesdagen: {', '.join(o['lesdagen'])}"
         piece += ")"
         parts.append(piece)
     return "; ".join(parts)
@@ -325,6 +357,7 @@ def main():
                 results.append(data)
                 print(f"  prerequisites:      {data['prerequisites']!r}")
                 print(f"  duration:           {data['duration']!r}")
+                print(f"  certification:      {data['certification']!r}")
                 print(f"  price:              {data['price']!r}")
                 print(f"  upcoming_schedule:  {data['upcoming_schedule']!r}")
                 print(f"  offers found:       {len(data['offers'])}")
@@ -361,9 +394,11 @@ def main():
                 cur.execute(
                     """
                     INSERT INTO courses (name, category, level, prerequisites, description,
-                                          price, duration, next_start_date, url, upcoming_schedule)
+                                          price, duration, next_start_date, url, upcoming_schedule,
+                                          certification)
                     VALUES (%(name)s, %(category)s, %(level)s, %(prerequisites)s, %(description)s,
-                            %(price)s, %(duration)s, NULL, %(url)s, %(upcoming_schedule)s)
+                            %(price)s, %(duration)s, NULL, %(url)s, %(upcoming_schedule)s,
+                            %(certification)s)
                     ON CONFLICT (name) DO UPDATE SET
                         category = EXCLUDED.category,
                         level = EXCLUDED.level,
@@ -373,6 +408,7 @@ def main():
                         duration = EXCLUDED.duration,
                         url = EXCLUDED.url,
                         upcoming_schedule = EXCLUDED.upcoming_schedule,
+                        certification = EXCLUDED.certification,
                         updated_at = now()
                     RETURNING id;
                     """,
