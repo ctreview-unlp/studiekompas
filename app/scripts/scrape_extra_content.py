@@ -246,6 +246,9 @@ def main():
 
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
+            course_ids = []
+            chunk_texts = []
+
             for offer in found_offers:
                 offer["upcoming_schedule"] = (
                     f"aanmelden via: {offer['signup_link']}" if offer["signup_link"] else None
@@ -269,12 +272,19 @@ def main():
                 )
                 course_id = cur.fetchone()[0]
                 cur.execute("DELETE FROM course_chunks WHERE course_id = %s;", (course_id,))
-                chunk_text = build_chunk_text(offer)
-                embedding = vo.embed([chunk_text], model=EMBED_MODEL, input_type="document").embeddings[0]
+
+                course_ids.append(course_id)
+                chunk_texts.append(build_chunk_text(offer))
+
+            print(f"Embedding {len(chunk_texts)} offers in a single batch call...")
+            embeddings = vo.embed(chunk_texts, model=EMBED_MODEL, input_type="document").embeddings
+
+            for course_id, chunk_text, embedding in zip(course_ids, chunk_texts, embeddings):
                 cur.execute(
                     "INSERT INTO course_chunks (course_id, chunk_text, embedding) VALUES (%s, %s, %s);",
                     (course_id, chunk_text, embedding),
                 )
+
         conn.commit()
 
     print(f"Ingested {len(found_offers)} offers into the database.")
