@@ -12,6 +12,11 @@
  * The chat itself stays hidden behind a consent notice until the visitor
  * explicitly accepts — no message is sent, and no conversation row is
  * created, until that happens.
+ *
+ * Bot messages render as plain text, EXCEPT for [label](url) patterns, which
+ * become real styled CTA buttons (e.g. enrollment links) — this is the one
+ * "markdown" the model is allowed to use, so raw checkout URLs are never
+ * shown to the visitor.
  */
 
 (function () {
@@ -189,6 +194,21 @@
         gap: 4px;
         align-items: center;
         padding: 12px 16px;
+      }
+      .cta-button {
+        display: inline-block;
+        margin: 6px 0;
+        padding: 10px 16px;
+        background: var(--sk-navy);
+        color: #FAF7F2;
+        border-radius: 10px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 13.5px;
+        transition: background 0.2s ease;
+      }
+      .cta-button:hover {
+        background: var(--sk-navy-dark);
       }
       .dot {
         width: 6px;
@@ -398,6 +418,11 @@
       this.input.style.height = Math.min(this.input.scrollHeight, 90) + "px";
     }
 
+    /**
+     * Strip common markdown artifacts and normalize em-dashes before display.
+     * The system prompt already instructs the model not to use these, but
+     * this is a safety net for whatever slips through anyway.
+     */
     stripMarkdown(text) {
       return text
         .replace(/\*\*(.*?)\*\*/g, "$1")
@@ -407,15 +432,48 @@
         .replace(/\s+—\s+/g, ", ")   // em-dash used as a pause/aside -> comma
         .replace(/\s+--\s+/g, ", ")  // double-hyphen used the same way -> comma
         .replace(/—/g, ",");         // any remaining em-dash -> comma
-      }
+    }
 
     appendMessage(role, text) {
       const div = document.createElement("div");
       div.className = `msg ${role}`;
-      div.textContent = role === "bot" ? this.stripMarkdown(text) : text;
+      if (role === "bot") {
+        this.renderBotMessage(div, this.stripMarkdown(text));
+      } else {
+        div.textContent = text;
+      }
       this.messagesEl.appendChild(div);
       this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
       return div;
+    }
+
+    /**
+     * Renders bot text as plain text, EXCEPT for [label](url) patterns,
+     * which become real styled CTA buttons (e.g. enrollment links). This is
+     * the one "markdown" the model is allowed to use, so a raw checkout URL
+     * is never shown as visible text to the visitor.
+     */
+    renderBotMessage(container, text) {
+      const linkPattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+      let lastIndex = 0;
+      let match;
+      while ((match = linkPattern.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+          container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+        }
+        const [, label, url] = match;
+        const link = document.createElement("a");
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.className = "cta-button";
+        link.textContent = label;
+        container.appendChild(link);
+        lastIndex = match.index + match[0].length;
+      }
+      if (lastIndex < text.length) {
+        container.appendChild(document.createTextNode(text.slice(lastIndex)));
+      }
     }
 
     showTyping() {
@@ -470,6 +528,11 @@
       this.sendMessage("Ik wil graag met een mens spreken in plaats van de AI.");
     }
 
+    /**
+     * Public helper: opens the widget (if closed) and sends a given message.
+     * Used by external "try this" prompt buttons on a demo/landing page.
+     * Respects the consent gate — does nothing until consent is accepted.
+     */
     askExample(text) {
       if (!this.isOpen) {
         this.toggle();
