@@ -56,6 +56,7 @@ COURSE_URLS = {
         ("NLP Practitioner Intensief", "https://unlp.nl/opleidingen/nlp-practitioner-intensief-opleiding/"),
         ("NLP Practitioner Zomer Intensief", "https://unlp.nl/opleidingen/nlp-zomer-practitioner-intensief/"),
         ("NLP Practitioner Online", "https://unlp.nl/opleidingen/nlp-practitioner-online/"),
+        ("NLP Practitioner Intensief Gent", "https://unlp.nl/opleidingen/nlp-practitioner-intensief-gent/"),
         ("NLP Practitioner Curacao", "https://unlp.nl/opleidingen/nlp-practitioner-intensief-curacao/"),
         ("NLP Practitioner Intensive (English)", "https://unlp.nl/opleidingen/nlp-practitioner-opleiding-english/"),
         ("NLP Master Practitioner", "https://unlp.nl/opleidingen/nlp-master-practitioner-opleiding/"),
@@ -113,6 +114,7 @@ COURSE_URLS = {
         ("New Code Training", "https://unlp.nl/opleidingen/nlp-new-code-training/"),
         ("NLP voor Jongeren", "https://unlp.nl/opleidingen/3-daagse-training-nlp-voor-jongeren/"),
         ("2-daagse Emotional Freedom Techniques (EFT)", "https://unlp.nl/opleidingen/2-daagse-eft-emotional-freedom-techniques/"),
+        ("Conflicthantering op de Werkvloer", "https://unlp.nl/opleidingen/conflicthantering-op-de-werkvloer-2/"),
     ],
 }
 

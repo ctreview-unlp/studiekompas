@@ -50,6 +50,9 @@ EXCLUDE_PATH_PATTERNS = [
     r"/cookie",
     r"/bedankt",           # thank-you pages after signup
     r"/gefeliciteerd",     # confirmation pages
+    r"/geboekt-",          # post-booking confirmation pages, not offers
+    r"/nieuwe-homepage",   # staging page
+    r"/elementor-template", # page builder drafts
     r"/category/",
     r"/tag/",
     r"/auteur/",
@@ -143,6 +146,8 @@ def check_offer(url: str) -> dict | None:
         full_href = href if href.startswith("http") else f"https://unlp.nl{href}"
         if full_href.rstrip("/") in {u.rstrip("/") for u in KNOWN_SITEWIDE_LINKS}:
             continue  # skip the banner, keep looking for a real page-specific link
+        if "#" in full_href:
+            continue  # in-page anchor (e.g. #inschrijven), not a distinct real offer
         if SIGNUP_LINK_PATTERN.search(a.get_text(" ", strip=True)):
             signup_link = full_href
             break
