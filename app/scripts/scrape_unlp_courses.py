@@ -286,6 +286,8 @@ def build_schedule_summary(offers: list[dict], max_items: int = 6) -> str | None
             piece += f", {o['availability_status']}"
         if o.get("lesdagen"):
             piece += f", lesdagen: {', '.join(o['lesdagen'])}"
+        if o.get("enrollment_url"):
+            piece += f", inschrijflink: {o['enrollment_url']}"
         piece += ")"
         parts.append(piece)
     return "; ".join(parts)
