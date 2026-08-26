@@ -403,8 +403,11 @@
         .replace(/\*\*(.*?)\*\*/g, "$1")
         .replace(/\*(.*?)\*/g, "$1")
         .replace(/^#{1,6}\s*/gm, "")
-        .replace(/^[-*]\s+/gm, "");
-    }
+        .replace(/^[-*]\s+/gm, "")
+        .replace(/\s+—\s+/g, ", ")   // em-dash used as a pause/aside -> comma
+        .replace(/\s+--\s+/g, ", ")  // double-hyphen used the same way -> comma
+        .replace(/—/g, ",");         // any remaining em-dash -> comma
+      }
 
     appendMessage(role, text) {
       const div = document.createElement("div");
