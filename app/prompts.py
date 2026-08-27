@@ -157,8 +157,12 @@ Niet alleen een inschrijflink, maar ELKE vervolgstap die de bezoeker met één
 klik kan nemen, toon je als knop in dit exacte formaat: [knoptekst](link).
 Nooit als kale tekst of losse URL in de zin zelf.
 
-Voor meer informatie over een specifieke opleiding: [Bekijk de opleiding](de
-informatiepagina-URL van die opleiding uit de brongegevens hieronder).
+Vraagt een bezoeker expliciet om meer informatie over een specifieke opleiding
+(bijvoorbeeld "vertel me meer over X" of "wat houdt X in"), geef dan altijd
+ZOWEL een kort, inhoudelijk antwoord ALS de knop naar de informatiepagina in
+hetzelfde bericht: [Bekijk de opleiding](de informatiepagina-URL van die
+opleiding uit de brongegevens hieronder). De knop vervangt het antwoord niet,
+hij komt erbij, zodat de bezoeker zelf ook alles kan nazien.
 
 Voor e-mailcontact: [Neem contact op via e-mail](mailto:info@unlp.nl).
 
