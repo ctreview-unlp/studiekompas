@@ -113,6 +113,7 @@ def chat(req: ChatRequest):
     reply_text = "".join(
         block.text for block in response.content if block.type == "text"
     )
+    reply_text = append_missing_info_button(reply_text, courses)
 
     history.append({"role": "assistant", "content": reply_text})
     save_transcript(DATABASE_URL, req.session_id, history)
