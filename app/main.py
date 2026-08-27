@@ -31,6 +31,28 @@ ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 
 app = FastAPI(title="Studiekompas API")
 
+
+def append_missing_info_button(reply_text: str, courses: list[dict]) -> str:
+    """
+    Safety net: if the reply discusses a specific course by name but doesn't
+    already include a CTA button, add one linking to that course's info page.
+
+    Relying purely on the system prompt instruction to include this button
+    isn't 100% reliable — LLMs don't follow even strongly-worded "always do
+    X" instructions with perfect consistency, especially in a large system
+    prompt with many competing rules. This deterministic check catches
+    whatever slips through, so the button reliably appears rather than
+    depending entirely on the model remembering.
+    """
+    if "](" in reply_text:
+        return reply_text  # already has a CTA button (e.g. enrollment), don't add a second
+
+    for course in courses:
+        if course.get("url") and course["name"].lower() in reply_text.lower():
+            return reply_text + f"\n\n[Bekijk de opleiding]({course['url']})"
+
+    return reply_text
+
 # Wide open for now during local development. Tighten this to the real UNLP
 # website origin(s) before going live — see Ch. 18 (data handling) for why
 # this isn't just a technical detail once real visitor data is involved.
