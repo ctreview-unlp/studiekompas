@@ -32,26 +32,39 @@ ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 app = FastAPI(title="Studiekompas API")
 
 
-def append_missing_info_button(reply_text: str, courses: list[dict]) -> str:
+def append_missing_info_button(reply_text: str, courses: list[dict], already_shown: set[str]) -> str:
     """
     Safety net: if the reply discusses a specific course by name but doesn't
     already include a CTA button, add one linking to that course's info page.
 
+    Only adds the button the FIRST time a given course is mentioned in a
+    conversation — a real advisor wouldn't hand you the same link every
+    single time a course comes up, and doing so on every mention (including
+    passing comparisons like "what's the difference between X and Y") reads
+    as pushy, which cuts against the whole "never sell" principle. `already_shown`
+    is a set of course names already given a button earlier in this conversation.
+
     Relying purely on the system prompt instruction to include this button
     isn't 100% reliable — LLMs don't follow even strongly-worded "always do
-    X" instructions with perfect consistency, especially in a large system
-    prompt with many competing rules. This deterministic check catches
-    whatever slips through, so the button reliably appears rather than
-    depending entirely on the model remembering.
+    X" instructions with perfect consistency. This deterministic check
+    catches whatever slips through the prompt, so the button reliably
+    appears at least once, without repeating unnecessarily.
     """
     if "](" in reply_text:
         return reply_text  # already has a CTA button (e.g. enrollment), don't add a second
 
     for course in courses:
-        if course.get("url") and course["name"].lower() in reply_text.lower():
+        name_lower = course["name"].lower()
+        if (
+            course.get("url")
+            and name_lower in reply_text.lower()
+            and name_lower not in already_shown
+        ):
+            already_shown.add(name_lower)
             return reply_text + f"\n\n[Bekijk de opleiding]({course['url']})"
 
     return reply_text
+
 
 # Wide open for now during local development. Tighten this to the real UNLP
 # website origin(s) before going live — see Ch. 18 (data handling) for why
@@ -113,7 +126,17 @@ def chat(req: ChatRequest):
     reply_text = "".join(
         block.text for block in response.content if block.type == "text"
     )
-    reply_text = append_missing_info_button(reply_text, courses)
+
+    # Figure out which courses have already gotten an info-page button
+    # earlier in this conversation, so we don't repeat it unnecessarily.
+    already_shown = set()
+    for turn in history:
+        if turn.get("role") == "assistant" and "](" in turn.get("content", ""):
+            for course in courses:
+                if course["name"].lower() in turn["content"].lower():
+                    already_shown.add(course["name"].lower())
+
+    reply_text = append_missing_info_button(reply_text, courses, already_shown)
 
     history.append({"role": "assistant", "content": reply_text})
     save_transcript(DATABASE_URL, req.session_id, history)
