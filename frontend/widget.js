@@ -487,6 +487,7 @@
           btn.textContent = label;
           btn.addEventListener("click", () => this.handleAction(actionName));
           container.appendChild(btn);
+        
         } else {
           const link = document.createElement("a");
           link.href = target;
@@ -495,6 +496,19 @@
           if (target.startsWith("http")) {
             link.target = "_blank";
             link.rel = "noopener noreferrer";
+          }
+          if (target.startsWith("mailto:")) {
+            // mailto: links silently do nothing if the visitor has no mail
+            // client configured — copy the address as a fallback so the
+            // button is still useful either way.
+            link.addEventListener("click", () => {
+              const email = target.replace("mailto:", "").split("?")[0];
+              navigator.clipboard.writeText(email).then(() => {
+                const original = link.textContent;
+                link.textContent = "E-mailadres gekopieerd!";
+                setTimeout(() => { link.textContent = original; }, 2000);
+              }).catch(() => {});
+            });
           }
           container.appendChild(link);
         }
