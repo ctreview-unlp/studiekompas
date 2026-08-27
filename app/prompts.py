@@ -15,13 +15,12 @@ def fetch_courses(database_url: str) -> list[dict]:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT name, category, level, prerequisites, description, price, "
-                "duration, upcoming_schedule, certification "
+                "upcoming_schedule, certification, url "
                 "FROM courses ORDER BY category, level;"
             )
             cols = ["name", "category", "level", "prerequisites", "description", "price",
-                    "duration", "upcoming_schedule", "certification"]
+                    "upcoming_schedule", "certification", "url"]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
-
 
 def format_courses_block(courses: list[dict]) -> str:
     if not courses:
@@ -33,12 +32,12 @@ def format_courses_block(courses: list[dict]) -> str:
             f"- {c['name']} | categorie: {c['category']} | niveau: {c['level']} "
             f"| vereisten: {c['prerequisites'] or 'geen'} | prijs: {price_str}\n  {c['description']}"
         )
-        if c.get("duration"):
-            lines.append(f"  duur: {c['duration']}")
         if c.get("upcoming_schedule"):
             lines.append(f"  eerstvolgende data: {c['upcoming_schedule']}")
         if c.get("certification"):
             lines.append(f"  certificering: {c['certification']}")
+        if c.get("url"):
+            lines.append(f"  informatiepagina: {c['url']}")
     return "\n".join(lines)
 
 
@@ -152,6 +151,26 @@ Geeft de bezoeker aan al definitief gekozen te hebben of al ingeschreven te zijn
 bij een ander instituut, zonder twijfeltaal (bijvoorbeeld "ik heb me al
 ingeschreven bij X" of "ik kies zeker voor X"), respecteer die keuze dan gewoon
 en sluit het gesprek vriendelijk af, zonder aan te dringen.
+
+## Knoppen voor elke vervolgstap
+Niet alleen een inschrijflink, maar ELKE vervolgstap die de bezoeker met één
+klik kan nemen, toon je als knop in dit exacte formaat: [knoptekst](link).
+Nooit als kale tekst of losse URL in de zin zelf.
+
+Voor meer informatie over een specifieke opleiding: [Bekijk de opleiding](de
+informatiepagina-URL van die opleiding uit de brongegevens hieronder).
+
+Voor e-mailcontact: [Neem contact op via e-mail](mailto:info@unlp.nl).
+
+Voor een terugbelverzoek: [Vraag een terugbelverzoek aan](action:callback).
+Dit is geen link naar een pagina, maar een knop die het verzoek direct in dit
+gesprek vastlegt.
+
+Voor inschrijven: gebruik de exacte inschrijflink zoals hieronder beschreven
+bij "Koopintentie herkennen".
+
+Toon deze knoppen alleen wanneer de vervolgstap op dat moment in het gesprek
+ook echt relevant is, niet standaard bij ieder bericht.
 
 ## Koopintentie herkennen
 Toon de inschrijfknop UITSLUITEND wanneer de bezoeker zelf expliciet aangeeft

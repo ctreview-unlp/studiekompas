@@ -13,10 +13,14 @@
  * explicitly accepts — no message is sent, and no conversation row is
  * created, until that happens.
  *
- * Bot messages render as plain text, EXCEPT for [label](url) patterns, which
- * become real styled CTA buttons (e.g. enrollment links) — this is the one
- * "markdown" the model is allowed to use, so raw checkout URLs are never
- * shown to the visitor.
+ * Bot messages render as plain text, EXCEPT for [label](target) patterns,
+ * which become real styled CTA buttons:
+ *   - https:// or http:// targets  -> open in a new tab (info pages, etc.)
+ *   - mailto: targets              -> open the visitor's mail client
+ *   - action:xxx targets           -> trigger an in-chat action (e.g. a
+ *                                      callback request) instead of navigating
+ * This is the one "markdown" the model is allowed to use, so raw URLs are
+ * never shown to the visitor as visible text.
  */
 
 (function () {
@@ -210,6 +214,11 @@
       .cta-button:hover {
         background: var(--sk-navy-dark);
       }
+      button.cta-button {
+        border: none;
+        font-family: inherit;
+        cursor: pointer;
+      }
       .dot {
         width: 6px;
         height: 6px;
@@ -344,6 +353,11 @@
   const WELCOME_MESSAGE =
     "Welkom bij het UNLP Studiekompas. Ik help je graag ontdekken welke opleiding het beste bij jou past. Mag ik eerst vragen wat jou vandaag naar onze website heeft gebracht?";
 
+  // Maps an "action:xxx" CTA target to the chat message it triggers when clicked.
+  const ACTION_MESSAGES = {
+    callback: "Ja, ik wil graag teruggebeld worden.",
+  };
+
   class StudiekompasWidget extends HTMLElement {
     constructor() {
       super();
@@ -448,31 +462,60 @@
     }
 
     /**
-     * Renders bot text as plain text, EXCEPT for [label](url) patterns,
-     * which become real styled CTA buttons (e.g. enrollment links). This is
-     * the one "markdown" the model is allowed to use, so a raw checkout URL
-     * is never shown as visible text to the visitor.
+     * Renders bot text as plain text, EXCEPT for [label](target) patterns,
+     * which become real styled CTA buttons:
+     *   - http(s):// targets -> real links, open in a new tab
+     *   - mailto: targets    -> real links, open the mail client
+     *   - action:xxx targets -> buttons that trigger an in-chat action
+     *                           (e.g. a callback request) instead of navigating
      */
     renderBotMessage(container, text) {
-      const linkPattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+      const linkPattern = /\[([^\]]+)\]\((mailto:[^\s)]+|action:[a-z_]+|https?:\/\/[^\s)]+)\)/g;
       let lastIndex = 0;
       let match;
       while ((match = linkPattern.exec(text)) !== null) {
         if (match.index > lastIndex) {
           container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
         }
-        const [, label, url] = match;
-        const link = document.createElement("a");
-        link.href = url;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.className = "cta-button";
-        link.textContent = label;
-        container.appendChild(link);
+        const [, label, target] = match;
+
+        if (target.startsWith("action:")) {
+          const actionName = target.slice("action:".length);
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "cta-button";
+          btn.textContent = label;
+          btn.addEventListener("click", () => this.handleAction(actionName));
+          container.appendChild(btn);
+        } else {
+          const link = document.createElement("a");
+          link.href = target;
+          link.className = "cta-button";
+          link.textContent = label;
+          if (target.startsWith("http")) {
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+          }
+          container.appendChild(link);
+        }
+
         lastIndex = match.index + match[0].length;
       }
       if (lastIndex < text.length) {
         container.appendChild(document.createTextNode(text.slice(lastIndex)));
+      }
+    }
+
+    /**
+     * Handles a click on an "action:xxx" CTA button — sends a natural chat
+     * message on the visitor's behalf instead of navigating anywhere, so it
+     * flows through the same conversation logic (e.g. callback honesty
+     * rules) as if the visitor had typed it themselves.
+     */
+    handleAction(actionName) {
+      const message = ACTION_MESSAGES[actionName];
+      if (message) {
+        this.sendMessage(message);
       }
     }
 
