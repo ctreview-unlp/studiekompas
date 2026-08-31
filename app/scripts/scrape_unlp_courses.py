@@ -10,12 +10,13 @@ Usage:
     python -m app.scripts.scrape_unlp_courses            # scrape + print only
     python -m app.scripts.scrape_unlp_courses --ingest    # scrape + write to DB
 
-Data extracted per course:
+Three kinds of data are extracted per course:
   1. General course info (name, prerequisites, description, duration,
      certification, a representative price) — via Elementor widget parsing.
   2. Scheduled offers (date, location, trainer, price, enrollment link,
      availability status, day-of-week pattern) — via Carta's own
-     `co-offer-*` markup, a repeating block per course.
+     `co-offer-*` markup, which is a separate, repeating block per course
+     (one course can have many scheduled instances).
 """
 
 import argparse
@@ -56,7 +57,6 @@ COURSE_URLS = {
         ("NLP Practitioner Intensief", "https://unlp.nl/opleidingen/nlp-practitioner-intensief-opleiding/"),
         ("NLP Practitioner Zomer Intensief", "https://unlp.nl/opleidingen/nlp-zomer-practitioner-intensief/"),
         ("NLP Practitioner Online", "https://unlp.nl/opleidingen/nlp-practitioner-online/"),
-        ("NLP Practitioner Intensief Gent", "https://unlp.nl/opleidingen/nlp-practitioner-intensief-gent/"),
         ("NLP Practitioner Curacao", "https://unlp.nl/opleidingen/nlp-practitioner-intensief-curacao/"),
         ("NLP Practitioner Intensive (English)", "https://unlp.nl/opleidingen/nlp-practitioner-opleiding-english/"),
         ("NLP Master Practitioner", "https://unlp.nl/opleidingen/nlp-master-practitioner-opleiding/"),
@@ -64,6 +64,7 @@ COURSE_URLS = {
         ("NLP Master Practitioner Online", "https://unlp.nl/opleidingen/nlp-master-practitioner-online/"),
         ("NLP Trainersopleiding", "https://unlp.nl/opleidingen/nlp-trainers-opleiding/"),
         ("NLP voor Jongeren", "https://unlp.nl/opleidingen/3-daagse-training-nlp-voor-jongeren/"),
+        ("NLP Practitioner Intensief Gent", "https://unlp.nl/opleidingen/nlp-practitioner-intensief-gent/"),
     ],
     "Systemisch": [
         ("Systemisch Coachen", "https://unlp.nl/opleidingen/systemisch-coachen-opleiding/"),
@@ -87,6 +88,8 @@ COURSE_URLS = {
     ],
     "Zakelijke trainingen": [
         ("Authentiek Presenteren", "https://unlp.nl/opleidingen/authentiek-presenteren/"),
+        ("Authentiek Presenteren (3 dagen)", "https://unlp.nl/opleidingen/authentiek-presenteren-2/"),
+        ("Conflicthantering op de Werkvloer", "https://unlp.nl/opleidingen/conflicthantering-op-de-werkvloer-2/"),
     ],
     "Online": [
         ("NLP Practitioner Online", "https://unlp.nl/opleidingen/nlp-practitioner-online/"),
@@ -112,7 +115,6 @@ COURSE_URLS = {
         ("New Code Training", "https://unlp.nl/opleidingen/nlp-new-code-training/"),
         ("NLP voor Jongeren", "https://unlp.nl/opleidingen/3-daagse-training-nlp-voor-jongeren/"),
         ("2-daagse Emotional Freedom Techniques (EFT)", "https://unlp.nl/opleidingen/2-daagse-eft-emotional-freedom-techniques/"),
-        ("Conflicthantering op de Werkvloer", "https://unlp.nl/opleidingen/conflicthantering-op-de-werkvloer-2/"),
     ],
 }
 
@@ -267,10 +269,11 @@ def build_schedule_summary(offers: list[dict], max_items: int = 6) -> str | None
     """Short human-readable summary of the next few upcoming offers, for the
     system prompt. Full detail per offer lives in course_schedules.
 
-    Includes the weekday pattern (lesdagen) so the advisor can correctly
-    answer "weekend variant" / "doordeweekse variant" questions using real
-    data, and includes availability status so it can mention urgency
-    honestly without ever citing an exact spot count Carta doesn't publish."""
+    Includes the weekday pattern (lesdagen) and trainer so the advisor can
+    correctly answer "weekend variant" / "doordeweekse variant" and
+    trainer-specific questions using real data, and includes availability
+    status so it can mention urgency honestly without ever citing an exact
+    spot count Carta doesn't publish."""
     dated = [o for o in offers if o["start_date"]]
     dated.sort(key=lambda o: o["start_date"])
     if not dated:
@@ -286,6 +289,8 @@ def build_schedule_summary(offers: list[dict], max_items: int = 6) -> str | None
             piece += f", {o['availability_status']}"
         if o.get("lesdagen"):
             piece += f", lesdagen: {', '.join(o['lesdagen'])}"
+        if o.get("trainer"):
+            piece += f", trainer: {o['trainer']}"
         if o.get("enrollment_url"):
             piece += f", inschrijflink: {o['enrollment_url']}"
         piece += ")"
