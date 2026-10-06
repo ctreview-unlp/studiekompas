@@ -93,6 +93,31 @@ tech stack this scaffold is built against.
 # studiekompas
 # studiekompas
 
+## Leads, summaries and the advisor overview
+
+- **Lead capture:** when a visitor wants contact with an advisor, the bot asks
+  for their name and email (plus phone for a callback) and stores them in
+  `leads` via the `save_lead` tool (`app/leads.py`).
+- **Summaries:** after every reply, a background task writes a short summary,
+  recommended course, next step and persona guess onto the conversation
+  (`app/summarize.py`).
+- **Advisor email:** a new lead triggers an email to the advisors (`app/notify.py`).
+- **Overview:** advisors read conversations and leads at `/admin` (`app/admin.py`).
+
+Environment variables (set in Railway):
+
+| Variable | Purpose |
+|---|---|
+| `ADMIN_PASSWORD` | Enables `/admin`; without it the page returns 404 |
+| `ADMIN_USERNAME` | Login name for `/admin` (default `unlp`) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | Mail server for lead emails (port defaults to 587, STARTTLS) |
+| `SMTP_FROM` | Sender address (defaults to `SMTP_USERNAME`) |
+| `LEAD_NOTIFY_TO` | Comma-separated advisor addresses that receive lead emails |
+| `PUBLIC_BASE_URL` | Base URL used for `/admin` links in emails (defaults to the Railway URL) |
+
+Without the SMTP variables, lead emails are skipped (logged) and leads are
+still visible in `/admin`.
+
 ## Tests
 
 ```bash

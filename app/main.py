@@ -14,6 +14,12 @@ protected by: CORS limited to the UNLP site, a per-client rate limit, a
 maximum message length, a cap on turns per conversation, and a cap on how
 much history is sent to the model.
 
+When a visitor wants contact with an advisor, the model collects their
+details and calls the `save_lead` tool (app/leads.py). After every reply a
+background task refreshes the advisor-facing summary (app/summarize.py)
+and, when a lead was just saved, emails the advisors (app/notify.py).
+Advisors read everything at /admin (app/admin.py).
+
 /demo mounts the frontend folder as static files so the widget demo page
 can be shared via a live URL instead of only running locally.
 """
@@ -25,15 +31,22 @@ from uuid import UUID
 import anthropic
 import psycopg
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.admin import router as admin_router
+from app.leads import SAVE_LEAD_TOOL, InvalidLead, clean_lead
+from app.notify import send_lead_email
 from app.prompts import build_system_prompt, fetch_courses
 from app.rate_limit import RateLimiter
-from app.storage import get_conversation, save_transcript, record_consent
+from app.storage import (
+    get_conversation, get_conversation_id, record_consent, save_lead, save_summary,
+    save_transcript,
+)
+from app.summarize import summarize_conversation
 
 load_dotenv()
 
@@ -41,6 +54,12 @@ logger = logging.getLogger("studiekompas")
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
+# Used to build links to /admin in advisor emails.
+PUBLIC_BASE_URL = os.environ.get(
+    "PUBLIC_BASE_URL", "https://studiekompas-production.up.railway.app"
+).rstrip("/")
+
+MODEL = "claude-sonnet-4-5"
 
 # Comma-separated list of sites allowed to call the API from a browser.
 # The /demo page is served from this API's own origin, so it needs no entry.
@@ -55,6 +74,8 @@ MAX_MESSAGE_CHARS = 2000
 MAX_HISTORY_MESSAGES = 30
 # A real advice conversation never needs this many turns; past it, hand off to a human.
 MAX_USER_TURNS = 40
+# Model calls per visitor message: one reply, plus a follow-up after a tool call.
+MAX_TOOL_ROUNDS = 3
 
 CONTACT_FALLBACK_REPLY = (
     "We hebben al een flink gesprek gevoerd. Om je verder goed te helpen, kun je "
@@ -141,6 +162,8 @@ def database_error(request: Request, exc: psycopg.Error):
 
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
+app.include_router(admin_router)
+
 
 class ChatRequest(BaseModel):
     session_id: UUID
@@ -174,7 +197,7 @@ def consent(req: ConsentRequest, request: Request):
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-def chat(req: ChatRequest, request: Request):
+def chat(req: ChatRequest, request: Request, background: BackgroundTasks):
     if not chat_limiter.allow(client_ip(request)):
         raise HTTPException(status_code=429, detail="rate_limited")
 
@@ -194,26 +217,59 @@ def chat(req: ChatRequest, request: Request):
     courses = fetch_courses(DATABASE_URL)
     system_prompt = build_system_prompt(courses)
 
+    saved_lead = {}
+
+    def run_tool(block) -> dict:
+        """Execute a tool call from the model and build its tool_result."""
+        if block.name != "save_lead":
+            return {"type": "tool_result", "tool_use_id": block.id, "is_error": True,
+                    "content": f"Onbekende tool: {block.name}"}
+        try:
+            lead = clean_lead(block.input)
+        except InvalidLead as e:
+            return {"type": "tool_result", "tool_use_id": block.id, "is_error": True,
+                    "content": str(e)}
+        save_lead(DATABASE_URL, session_id, lead)
+        saved_lead.clear()
+        saved_lead.update(lead)
+        return {"type": "tool_result", "tool_use_id": block.id,
+                "content": "Gegevens opgeslagen en doorgegeven aan een opleidingsadviseur."}
+
+    messages = trim_history(history, MAX_HISTORY_MESSAGES)
+    reply_parts = []
     try:
-        response = claude.messages.create(
-            model="claude-sonnet-4-5",
-            max_tokens=1024,
-            # The system prompt (instructions + full course list) is identical
-            # for every request until the course data changes, so cache it.
-            system=[{
-                "type": "text",
-                "text": system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }],
-            messages=trim_history(history, MAX_HISTORY_MESSAGES),
-        )
+        for _ in range(MAX_TOOL_ROUNDS):
+            response = claude.messages.create(
+                model=MODEL,
+                max_tokens=1024,
+                tools=[SAVE_LEAD_TOOL],
+                # The system prompt (instructions + full course list) is identical
+                # for every request until the course data changes, so cache it.
+                system=[{
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }],
+                messages=messages,
+            )
+            text = "".join(b.text for b in response.content if b.type == "text").strip()
+            if text:
+                reply_parts.append(text)
+            if response.stop_reason != "tool_use":
+                break
+            tool_results = [run_tool(b) for b in response.content if b.type == "tool_use"]
+            messages = messages + [
+                {"role": "assistant", "content": [b.model_dump(exclude_none=True) for b in response.content]},
+                {"role": "user", "content": tool_results},
+            ]
     except anthropic.APIError:
         logger.exception("Claude API call failed for session %s", session_id)
         raise HTTPException(status_code=503, detail="model_unavailable")
 
-    reply_text = "".join(
-        block.text for block in response.content if block.type == "text"
-    ).strip()
+    # Only the visible text is kept in the transcript; the tool exchange is
+    # internal. If the model spoke both before and after a tool call, the
+    # last part is the one that reflects the tool's outcome.
+    reply_text = reply_parts[-1] if reply_parts else ""
     if not reply_text:
         logger.warning("Empty reply (stop_reason=%s) for session %s", response.stop_reason, session_id)
         raise HTTPException(status_code=503, detail="empty_reply")
@@ -232,7 +288,32 @@ def chat(req: ChatRequest, request: Request):
     history.append({"role": "assistant", "content": reply_text})
     save_transcript(DATABASE_URL, session_id, history)
 
+    background.add_task(
+        after_reply, session_id, history, [c["name"] for c in courses], dict(saved_lead) or None
+    )
     return ChatResponse(reply=reply_text)
+
+
+def after_reply(session_id: str, history: list[dict], course_names: list[str], lead: dict | None) -> None:
+    """
+    Runs after the response has been sent, so the visitor never waits on it.
+    Refreshes the advisor summary, then emails the advisors if a lead was
+    just saved. Failures are logged and never affect the conversation.
+    """
+    summary = None
+    try:
+        summary = summarize_conversation(claude, MODEL, history, course_names)
+        save_summary(DATABASE_URL, session_id, summary)
+    except Exception:
+        logger.exception("Summary failed for session %s", session_id)
+
+    if lead:
+        try:
+            conversation_id = get_conversation_id(DATABASE_URL, session_id)
+            url = f"{PUBLIC_BASE_URL}/admin/conversations/{conversation_id}" if conversation_id else None
+            send_lead_email(lead, summary, url)
+        except Exception:
+            logger.exception("Lead notification failed for session %s", session_id)
 
 
 # Mounted last so it doesn't shadow the API routes above.

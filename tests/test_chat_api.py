@@ -29,8 +29,20 @@ class FakeDB:
         self.saved = transcript
 
 
+class Block(SimpleNamespace):
+    def model_dump(self, exclude_none=False):
+        return dict(vars(self))
+
+
 def text_response(text):
-    return SimpleNamespace(content=[SimpleNamespace(type="text", text=text)], stop_reason="end_turn")
+    return SimpleNamespace(content=[Block(type="text", text=text)], stop_reason="end_turn")
+
+
+def tool_response(tool_input):
+    return SimpleNamespace(
+        content=[Block(type="tool_use", id="toolu_1", name="save_lead", input=tool_input)],
+        stop_reason="tool_use",
+    )
 
 
 @pytest.fixture
@@ -38,17 +50,26 @@ def setup(monkeypatch):
     """Wires fake storage and a fake Claude client into the app."""
     db = FakeDB()
     calls = []
+    replies = []  # queued fake model responses; defaults to a plain text reply
+    leads, summaries, emails = [], [], []
 
     def fake_create(**kwargs):
         calls.append(kwargs)
-        return text_response("Wat brengt je hier vandaag?")
+        return replies.pop(0) if replies else text_response("Wat brengt je hier vandaag?")
 
     monkeypatch.setattr(main, "get_conversation", db.get_conversation)
     monkeypatch.setattr(main, "save_transcript", db.save_transcript)
     monkeypatch.setattr(main, "fetch_courses", lambda _db: COURSES)
     monkeypatch.setattr(main.claude.messages, "create", fake_create)
     monkeypatch.setattr(main, "chat_limiter", RateLimiter(max_requests=100, window_seconds=60))
-    return SimpleNamespace(db=db, calls=calls, client=TestClient(main.app))
+    monkeypatch.setattr(main, "save_lead", lambda _db, _sid, lead: leads.append(lead) or 1)
+    monkeypatch.setattr(main, "summarize_conversation",
+                        lambda *_a: {"summary": "Starter zoekt een opleiding."})
+    monkeypatch.setattr(main, "save_summary", lambda _db, _sid, summary: summaries.append(summary))
+    monkeypatch.setattr(main, "get_conversation_id", lambda _db, _sid: 42)
+    monkeypatch.setattr(main, "send_lead_email", lambda *a: emails.append(a))
+    return SimpleNamespace(db=db, calls=calls, replies=replies, leads=leads, summaries=summaries,
+                           emails=emails, client=TestClient(main.app))
 
 
 def post_chat(client, message="Hallo", session_id=None):
@@ -127,3 +148,42 @@ def test_long_history_is_trimmed_before_sending(setup):
     assert len(sent) <= main.MAX_HISTORY_MESSAGES
     assert sent[0]["role"] == "user"
     assert sent[-1]["content"] == "Hallo"
+
+
+def test_summary_refreshed_after_each_reply(setup):
+    post_chat(setup.client)
+    assert setup.summaries == [{"summary": "Starter zoekt een opleiding."}]
+    assert setup.emails == []
+
+
+def test_lead_saved_and_advisors_emailed(setup):
+    setup.replies[:] = [
+        tool_response({"name": "Sanne", "email": "Sanne@Example.nl", "contact_preference": "email",
+                       "course_interest": "NLP Practitioner"}),
+        text_response("Dank je Sanne, ik heb je gegevens doorgegeven aan een adviseur."),
+    ]
+    res = post_chat(setup.client, message="Ja, mijn naam is Sanne, sanne@example.nl")
+
+    assert res.status_code == 200
+    assert res.json()["reply"].startswith("Dank je Sanne")
+    assert setup.leads[0]["email"] == "sanne@example.nl"
+    # The model got the tool result back before writing its final reply.
+    tool_result = setup.calls[1]["messages"][-1]["content"][0]
+    assert tool_result["type"] == "tool_result" and not tool_result.get("is_error")
+    lead, summary, url = setup.emails[0]
+    assert lead["name"] == "Sanne"
+    assert url.endswith("/admin/conversations/42")
+    # Only the visible reply is stored, not the tool exchange.
+    assert all(isinstance(t["content"], str) for t in setup.db.saved)
+
+
+def test_invalid_lead_is_not_saved_and_model_is_told(setup):
+    setup.replies[:] = [
+        tool_response({"name": "Sanne", "email": "sanne-at-example", "contact_preference": "email"}),
+        text_response("Klopt je e-mailadres? Het lijkt niet helemaal goed te gaan."),
+    ]
+    post_chat(setup.client)
+
+    assert setup.leads == []
+    assert setup.emails == []
+    assert setup.calls[1]["messages"][-1]["content"][0]["is_error"] is True

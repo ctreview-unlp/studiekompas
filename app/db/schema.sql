@@ -68,7 +68,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     recommended_step    TEXT,               -- enroll / info_evening / advice_call / brochure / human_handoff
     naturalness_rating  SMALLINT,           -- 1-5, filled in by tester/visitor feedback (Ch. 22 DoD)
     consent_given       BOOLEAN NOT NULL DEFAULT false,
-    consent_timestamp   TIMESTAMPTZ
+    consent_timestamp   TIMESTAMPTZ,
+    summary_updated_at  TIMESTAMPTZ
 );
 
 -- Required by the ON CONFLICT (session_id) upserts in app/storage.py.
@@ -86,5 +87,11 @@ CREATE TABLE IF NOT EXISTS leads (
     motivation      TEXT,
     objections      TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    retention_until DATE            -- enforce GDPR retention window (Ch. 18 addendum)
+    retention_until DATE,           -- enforce GDPR retention window (Ch. 18 addendum)
+    phone           TEXT,           -- only asked for when the visitor wants to be called back
+    contact_preference TEXT         -- 'email' or 'telefoon'
 );
+
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS contact_preference TEXT;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS summary_updated_at TIMESTAMPTZ;
