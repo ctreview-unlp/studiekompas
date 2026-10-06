@@ -11,16 +11,20 @@ import psycopg
 from psycopg.types.json import Json
 
 
-def get_transcript(database_url: str, session_id: str) -> list[dict]:
-    """Return the existing transcript for a session, or [] if none exists yet."""
+def get_conversation(database_url: str, session_id: str) -> tuple[list[dict], bool]:
+    """
+    Return (transcript, consent_given) for a session, or ([], False) if the
+    session doesn't exist yet. The chat endpoint uses consent_given to refuse
+    messages from sessions that never accepted the data-use notice.
+    """
     with psycopg.connect(database_url) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT transcript FROM conversations WHERE session_id = %s;",
+                "SELECT transcript, consent_given FROM conversations WHERE session_id = %s;",
                 (session_id,),
             )
             row = cur.fetchone()
-            return row[0] if row else []
+            return (row[0], row[1]) if row else ([], False)
 
 
 def save_transcript(database_url: str, session_id: str, transcript: list[dict]) -> None:

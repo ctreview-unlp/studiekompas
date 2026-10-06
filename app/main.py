@@ -6,30 +6,87 @@ courses currently in the database. Conversation transcripts are persisted
 to Postgres (app/storage.py) instead of kept in memory.
 
 /api/consent records that a visitor accepted the data-use notice before
-any conversation starts.
+any conversation starts. /api/chat refuses sessions that haven't, so the
+consent gate can't be skipped by calling the API directly.
+
+Because /api/chat is public and every call costs a Claude request, it is
+protected by: CORS limited to the UNLP site, a per-client rate limit, a
+maximum message length, a cap on turns per conversation, and a cap on how
+much history is sent to the model.
 
 /demo mounts the frontend folder as static files so the widget demo page
 can be shared via a live URL instead of only running locally.
 """
 
+import logging
 import os
+from uuid import UUID
 
 import anthropic
+import psycopg
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.prompts import build_system_prompt, fetch_courses
-from app.storage import get_transcript, save_transcript, record_consent
+from app.rate_limit import RateLimiter
+from app.storage import get_conversation, save_transcript, record_consent
 
 load_dotenv()
+
+logger = logging.getLogger("studiekompas")
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 
+# Comma-separated list of sites allowed to call the API from a browser.
+# The /demo page is served from this API's own origin, so it needs no entry.
+ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("ALLOWED_ORIGINS", "https://unlp.nl,https://www.unlp.nl").split(",")
+    if o.strip()
+]
+
+MAX_MESSAGE_CHARS = 2000
+# Only the most recent messages are sent to Claude; the full transcript is still stored.
+MAX_HISTORY_MESSAGES = 30
+# A real advice conversation never needs this many turns; past it, hand off to a human.
+MAX_USER_TURNS = 40
+
+CONTACT_FALLBACK_REPLY = (
+    "We hebben al een flink gesprek gevoerd. Om je verder goed te helpen, kun je "
+    "het beste contact opnemen met een opleidingsadviseur van UNLP. "
+    "[Mail een adviseur](mailto:info@unlp.nl)"
+)
+
+chat_limiter = RateLimiter(max_requests=20, window_seconds=300)
+consent_limiter = RateLimiter(max_requests=10, window_seconds=300)
+
 app = FastAPI(title="Studiekompas API")
+
+
+def trim_history(history: list[dict], max_messages: int) -> list[dict]:
+    """
+    Keep only the last `max_messages` turns for the model, so long
+    conversations don't grow the cost of every request without bound.
+    The Messages API requires the first message to be from the user,
+    so leading assistant turns left over from the cut are dropped.
+    """
+    trimmed = history[-max_messages:]
+    while trimmed and trimmed[0].get("role") != "user":
+        trimmed = trimmed[1:]
+    return trimmed
+
+
+def client_ip(request: Request) -> str:
+    """Railway sits behind a proxy, so the real visitor IP is in X-Forwarded-For."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 def append_missing_info_button(reply_text: str, courses: list[dict], already_shown: set[str]) -> str:
@@ -66,22 +123,28 @@ def append_missing_info_button(reply_text: str, courses: list[dict], already_sho
     return reply_text
 
 
-# Wide open for now during local development. Tighten this to the real UNLP
-# website origin(s) before going live — see Ch. 18 (data handling) for why
-# this isn't just a technical detail once real visitor data is involved.
+# Limited to the UNLP website (see ALLOWED_ORIGINS) — see Ch. 18 (data
+# handling) for why this isn't just a technical detail once real visitor
+# data is involved. For local development, set ALLOWED_ORIGINS in .env.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
+
+
+@app.exception_handler(psycopg.Error)
+def database_error(request: Request, exc: psycopg.Error):
+    logger.exception("Database error on %s", request.url.path)
+    return JSONResponse(status_code=503, content={"detail": "database_unavailable"})
 
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 
 class ChatRequest(BaseModel):
-    session_id: str
-    message: str
+    session_id: UUID
+    message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
 
 
 class ChatResponse(BaseModel):
@@ -89,7 +152,7 @@ class ChatResponse(BaseModel):
 
 
 class ConsentRequest(BaseModel):
-    session_id: str
+    session_id: UUID
 
 
 @app.get("/health")
@@ -103,29 +166,57 @@ def root():
 
 
 @app.post("/api/consent")
-def consent(req: ConsentRequest):
-    record_consent(DATABASE_URL, req.session_id)
+def consent(req: ConsentRequest, request: Request):
+    if not consent_limiter.allow(client_ip(request)):
+        raise HTTPException(status_code=429, detail="rate_limited")
+    record_consent(DATABASE_URL, str(req.session_id))
     return {"status": "ok"}
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-def chat(req: ChatRequest):
-    history = get_transcript(DATABASE_URL, req.session_id)
+def chat(req: ChatRequest, request: Request):
+    if not chat_limiter.allow(client_ip(request)):
+        raise HTTPException(status_code=429, detail="rate_limited")
+
+    session_id = str(req.session_id)
+    history, consent_given = get_conversation(DATABASE_URL, session_id)
+    if not consent_given:
+        raise HTTPException(status_code=403, detail="consent_required")
+
     history.append({"role": "user", "content": req.message})
+
+    user_turns = sum(1 for turn in history if turn.get("role") == "user")
+    if user_turns > MAX_USER_TURNS:
+        history.append({"role": "assistant", "content": CONTACT_FALLBACK_REPLY})
+        save_transcript(DATABASE_URL, session_id, history)
+        return ChatResponse(reply=CONTACT_FALLBACK_REPLY)
 
     courses = fetch_courses(DATABASE_URL)
     system_prompt = build_system_prompt(courses)
 
-    response = claude.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=1024,
-        system=system_prompt,
-        messages=history,
-    )
+    try:
+        response = claude.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=1024,
+            # The system prompt (instructions + full course list) is identical
+            # for every request until the course data changes, so cache it.
+            system=[{
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=trim_history(history, MAX_HISTORY_MESSAGES),
+        )
+    except anthropic.APIError:
+        logger.exception("Claude API call failed for session %s", session_id)
+        raise HTTPException(status_code=503, detail="model_unavailable")
 
     reply_text = "".join(
         block.text for block in response.content if block.type == "text"
-    )
+    ).strip()
+    if not reply_text:
+        logger.warning("Empty reply (stop_reason=%s) for session %s", response.stop_reason, session_id)
+        raise HTTPException(status_code=503, detail="empty_reply")
 
     # Figure out which courses have already gotten an info-page button
     # earlier in this conversation, so we don't repeat it unnecessarily.
@@ -139,7 +230,7 @@ def chat(req: ChatRequest):
     reply_text = append_missing_info_button(reply_text, courses, already_shown)
 
     history.append({"role": "assistant", "content": reply_text})
-    save_transcript(DATABASE_URL, req.session_id, history)
+    save_transcript(DATABASE_URL, session_id, history)
 
     return ChatResponse(reply=reply_text)
 

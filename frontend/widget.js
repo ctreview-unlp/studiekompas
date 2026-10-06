@@ -5,13 +5,22 @@
  *   <script src="widget.js"></script>
  *   <studiekompas-widget api-url="https://studiekompas-production.up.railway.app"></studiekompas-widget>
  *
+ * Optional placement attributes (default: bottom-right, 24px from the edges):
+ *   position="bottom-left"   -> sit in the bottom-left corner instead
+ *   offset-bottom="100"      -> distance from the bottom in px (e.g. to stack above another widget)
+ *   offset-side="24"         -> distance from the left/right edge in px
+ *
  * Talks to two backend endpoints:
  *   POST {api-url}/api/consent  { session_id }              -> { status }
  *   POST {api-url}/api/chat     { session_id, message }      -> { reply }
  *
  * The chat itself stays hidden behind a consent notice until the visitor
  * explicitly accepts — no message is sent, and no conversation row is
- * created, until that happens.
+ * created, until that happens. The backend enforces this too.
+ *
+ * The session (id, consent, messages, open/closed) is kept in sessionStorage,
+ * so the conversation survives navigating between pages on unlp.nl within
+ * the same tab, and is gone once the tab is closed.
  *
  * Bot messages render as plain text, EXCEPT for [label](target) patterns,
  * which become real styled CTA buttons:
@@ -39,9 +48,13 @@
         all: initial;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         position: fixed;
-        bottom: 24px;
-        right: 24px;
+        bottom: var(--sk-offset-bottom, 24px);
+        right: var(--sk-offset-side, 24px);
         z-index: 999999;
+      }
+      :host([position="bottom-left"]) {
+        right: auto;
+        left: var(--sk-offset-side, 24px);
       }
 
       * { box-sizing: border-box; }
@@ -91,6 +104,10 @@
         transform: translateY(16px) scale(0.98);
         pointer-events: none;
         transition: opacity 0.22s ease, transform 0.22s ease;
+      }
+      :host([position="bottom-left"]) .panel {
+        right: auto;
+        left: 0;
       }
       .panel.open {
         opacity: 1;
@@ -340,7 +357,7 @@
       </div>
 
       <div class="composer hidden">
-        <textarea id="input" rows="1" placeholder="Typ je bericht..." aria-label="Je bericht"></textarea>
+        <textarea id="input" rows="1" maxlength="2000" placeholder="Typ je bericht..." aria-label="Je bericht"></textarea>
         <button class="send" id="send-btn" aria-label="Verstuur bericht">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path d="M4 12L20 4L14 20L11 13L4 12Z" fill="#FAF7F2"/>
@@ -353,6 +370,23 @@
   const WELCOME_MESSAGE =
     "Welkom bij het UNLP Studiekompas. Ik help je graag ontdekken welke opleiding het beste bij jou past. Mag ik eerst vragen wat jou vandaag naar onze website heeft gebracht?";
 
+  const STORAGE_KEY = "studiekompas-session";
+
+  const ERROR_MESSAGE =
+    "Er ging iets mis bij het verbinden met de adviseur. Probeer het over even nog eens, of mail ons direct. [Mail UNLP](mailto:info@unlp.nl)";
+  const RATE_LIMIT_MESSAGE =
+    "Je stuurt veel berichten kort achter elkaar. Wacht even een paar minuten en probeer het dan opnieuw.";
+
+  // sessionStorage can be unavailable (private mode, blocked site data), so
+  // every access is guarded and the widget still works without it.
+  function loadSession() {
+    try {
+      return JSON.parse(sessionStorage.getItem(STORAGE_KEY)) || null;
+    } catch {
+      return null;
+    }
+  }
+
   // Maps an "action:xxx" CTA target to the chat message it triggers when clicked.
   const ACTION_MESSAGES = {
     callback: "Ja, ik wil graag teruggebeld worden.",
@@ -363,14 +397,51 @@
       super();
       this.attachShadow({ mode: "open" });
       this.shadowRoot.innerHTML = TEMPLATE;
-      this.sessionId = crypto.randomUUID();
+      const saved = loadSession();
+      this.sessionId = saved?.sessionId || crypto.randomUUID();
+      this.savedSession = saved;
+      this.history = [];
       this.isOpen = false;
       this.isSending = false;
       this.consentGiven = false;
     }
 
+    saveSession() {
+      try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+          sessionId: this.sessionId,
+          consentGiven: this.consentGiven,
+          isOpen: this.isOpen,
+          messages: this.history,
+        }));
+      } catch {
+        // Storage unavailable: the chat still works, it just won't survive a page load.
+      }
+    }
+
+    /** Re-renders a conversation saved on a previous page in this tab. */
+    restoreSession(saved) {
+      if (saved.consentGiven) {
+        this.consentGiven = true;
+        this.showChat();
+        this.history = Array.isArray(saved.messages) ? saved.messages : [];
+        for (const { role, text } of this.history) {
+          this.appendMessage(role, text);
+        }
+      }
+      if (saved.isOpen) {
+        this.toggle();
+      }
+    }
+
     connectedCallback() {
       this.apiUrl = (this.getAttribute("api-url") || "").replace(/\/$/, "");
+
+      // Optional pixel offsets, e.g. to sit above another widget in the same corner
+      const offsetBottom = this.getAttribute("offset-bottom");
+      const offsetSide = this.getAttribute("offset-side");
+      if (offsetBottom) this.style.setProperty("--sk-offset-bottom", `${parseInt(offsetBottom, 10)}px`);
+      if (offsetSide) this.style.setProperty("--sk-offset-side", `${parseInt(offsetSide, 10)}px`);
 
       this.launcher = this.shadowRoot.querySelector(".launcher");
       this.panel = this.shadowRoot.querySelector(".panel");
@@ -394,6 +465,10 @@
         }
       });
       this.input.addEventListener("input", () => this.autoResize());
+
+      if (this.savedSession) {
+        this.restoreSession(this.savedSession);
+      }
     }
 
     toggle() {
@@ -401,29 +476,39 @@
       this.launcher.classList.toggle("open", this.isOpen);
       this.panel.classList.toggle("open", this.isOpen);
       this.launcher.setAttribute("aria-expanded", String(this.isOpen));
+      this.saveSession();
 
       if (this.isOpen && this.consentGiven) {
         this.input.focus();
       }
     }
 
-    async acceptConsent() {
-      this.consentGiven = true;
+    showChat() {
       this.consentGate.style.display = "none";
       this.messagesEl.style.display = "flex";
       this.composerEl.classList.remove("hidden");
       this.humanRequestEl.classList.remove("hidden");
-      this.appendMessage("bot", WELCOME_MESSAGE);
-      this.input.focus();
+    }
 
+    async acceptConsent() {
+      this.consentGiven = true;
+      this.showChat();
+      this.appendMessage("bot", WELCOME_MESSAGE, { persist: true });
+      this.input.focus();
+      await this.recordConsent();
+    }
+
+    async recordConsent() {
       try {
-        await fetch(`${this.apiUrl}/api/consent`, {
+        const res = await fetch(`${this.apiUrl}/api/consent`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ session_id: this.sessionId }),
         });
+        return res.ok;
       } catch (err) {
         console.error("Studiekompas consent recording failed:", err);
+        return false;
       }
     }
 
@@ -448,7 +533,15 @@
         .replace(/—/g, ",");         // any remaining em-dash -> comma
     }
 
-    appendMessage(role, text) {
+    /**
+     * Adds a message to the chat. With persist: true it is also kept in the
+     * session so it reappears after a page load; error notices are not.
+     */
+    appendMessage(role, text, { persist = false } = {}) {
+      if (persist) {
+        this.history.push({ role, text });
+        this.saveSession();
+      }
       const div = document.createElement("div");
       div.className = `msg ${role}`;
       if (role === "bot") {
@@ -548,7 +641,7 @@
       const text = (overrideText ?? this.input.value).trim();
       if (!text || this.isSending) return;
 
-      this.appendMessage("user", text);
+      this.appendMessage("user", text, { persist: true });
       this.input.value = "";
       this.autoResize();
       this.isSending = true;
@@ -557,28 +650,39 @@
       const typingEl = this.showTyping();
 
       try {
-        const res = await fetch(`${this.apiUrl}/api/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: this.sessionId, message: text }),
-        });
+        let res = await this.postChat(text);
 
-        if (!res.ok) throw new Error(`API returned ${res.status}`);
-        const data = await res.json();
+        // The visitor accepted in the widget, but recording it failed
+        // (e.g. a network blip) — record it again and retry once.
+        if (res.status === 403 && (await this.recordConsent())) {
+          res = await this.postChat(text);
+        }
 
         typingEl.remove();
-        this.appendMessage("bot", data.reply || "Sorry, er ging iets mis. Probeer het nog eens.");
+        if (res.status === 429) {
+          this.appendMessage("bot", RATE_LIMIT_MESSAGE);
+        } else if (!res.ok) {
+          throw new Error(`API returned ${res.status}`);
+        } else {
+          const data = await res.json();
+          this.appendMessage("bot", data.reply, { persist: true });
+        }
       } catch (err) {
         typingEl.remove();
-        this.appendMessage(
-          "bot",
-          "Er ging iets mis bij het verbinden met de adviseur. Probeer het over even nog eens."
-        );
+        this.appendMessage("bot", ERROR_MESSAGE);
         console.error("Studiekompas widget error:", err);
       } finally {
         this.isSending = false;
         this.sendBtn.disabled = false;
       }
+    }
+
+    postChat(text) {
+      return fetch(`${this.apiUrl}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: this.sessionId, message: text }),
+      });
     }
 
     requestHuman() {

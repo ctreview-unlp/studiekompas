@@ -17,7 +17,27 @@ CREATE TABLE IF NOT EXISTS courses (
     duration        TEXT,                   -- e.g. '6 maanden', '3 dagen'
     next_start_date DATE,
     url             TEXT,
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    upcoming_schedule TEXT,                 -- short human-readable summary of upcoming dates, fed to the system prompt
+    certification   TEXT
+);
+
+-- Added after the first deploy; keeps re-running this file safe on an existing database.
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS upcoming_schedule TEXT;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS certification TEXT;
+
+-- One row per scheduled run of a course (location, date, trainer), as scraped from unlp.nl.
+CREATE TABLE IF NOT EXISTS course_schedules (
+    id                  SERIAL PRIMARY KEY,
+    course_id           INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    location            TEXT,
+    start_date          DATE,
+    trainer             TEXT,
+    variant             TEXT,
+    price               NUMERIC,
+    enrollment_url      TEXT,
+    scraped_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    availability_status TEXT
 );
 
 -- Chunked + embedded representation of the above, used for retrieval.
@@ -50,6 +70,9 @@ CREATE TABLE IF NOT EXISTS conversations (
     consent_given       BOOLEAN NOT NULL DEFAULT false,
     consent_timestamp   TIMESTAMPTZ
 );
+
+-- Required by the ON CONFLICT (session_id) upserts in app/storage.py.
+CREATE UNIQUE INDEX IF NOT EXISTS conversations_session_id_key ON conversations (session_id);
 
 -- ---------------------------------------------------------------------
 -- Leads (Ch. 18: name, email, motivation, objections, etc.)

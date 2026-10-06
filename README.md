@@ -33,6 +33,8 @@ Studiekompas/
    ```bash
    cp .env.example .env
    # then fill in DATABASE_URL, ANTHROPIC_API_KEY, VOYAGE_API_KEY
+   # optional: ALLOWED_ORIGINS — comma-separated sites allowed to embed the widget
+   #           (defaults to https://unlp.nl,https://www.unlp.nl)
    ```
 
 3. **Install dependencies:**
@@ -90,3 +92,13 @@ See `Studiekompas_Phase1_Buildplan.docx` for the full scope, timeline, and
 tech stack this scaffold is built against.
 # studiekompas
 # studiekompas
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+The tests replace the database and Claude API with fakes, so they need no
+credentials and cost nothing to run.
