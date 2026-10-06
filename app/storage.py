@@ -11,6 +11,8 @@ import psycopg
 import psycopg.rows
 from psycopg.types.json import Json
 
+from app.retention import lead_months
+
 
 def get_conversation(database_url: str, session_id: str) -> tuple[list[dict], bool]:
     """
@@ -77,7 +79,8 @@ def save_lead(database_url: str, session_id: str, lead: dict) -> int:
     Store (or update) the contact details a visitor left in a conversation.
     One lead per conversation: if the visitor corrects their details later
     in the same chat, the existing row is updated instead of duplicated.
-    Returns the lead id.
+    New leads get a retention_until date, after which app/retention.py
+    deletes them. Returns the lead id.
     """
     fields = ("name", "email", "phone", "contact_preference",
               "course_interest", "motivation", "objections")
@@ -105,13 +108,13 @@ def save_lead(database_url: str, session_id: str, lead: dict) -> int:
                 cur.execute(
                     """
                     INSERT INTO leads (conversation_id, name, email, phone, contact_preference,
-                                       course_interest, motivation, objections)
+                                       course_interest, motivation, objections, retention_until)
                     VALUES (%(conversation_id)s, %(name)s, %(email)s, %(phone)s,
                             %(contact_preference)s, %(course_interest)s, %(motivation)s,
-                            %(objections)s)
+                            %(objections)s, current_date + make_interval(months => %(months)s))
                     RETURNING id;
                     """,
-                    {**values, "conversation_id": conversation_id},
+                    {**values, "conversation_id": conversation_id, "months": lead_months()},
                 )
             lead_id = cur.fetchone()[0]
         conn.commit()

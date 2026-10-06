@@ -1,6 +1,8 @@
 #!/bin/bash
 if [ "$SERVICE_ROLE" = "scraper" ]; then
   echo "Running as scraper service"
+  # Daily GDPR clean-up runs first, so a failing scrape never skips it.
+  python -m app.retention
   python -m app.scripts.scrape_unlp_courses --ingest
 else
   echo "Running as web service"

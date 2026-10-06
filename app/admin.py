@@ -20,6 +20,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from app.notify import STEP_LABELS
+from app.retention import conversation_months, lead_months
 from app.storage import get_conversation_detail, list_conversations
 
 router = APIRouter(prefix="/admin")
@@ -130,6 +131,8 @@ def overview(leads: bool = False, offset: int = Query(0, ge=0)):
   <a href="/admin" class="{'' if leads else 'active'}">Alle gesprekken</a>
   <a href="/admin?leads=true" class="{'active' if leads else ''}">Alleen aanvragen</a>
 </p>
+<p class="meta">Gesprekken worden na {conversation_months()} maanden automatisch verwijderd,
+aanvragen (met het bijbehorende gesprek) na {lead_months()} maanden.</p>
 {''.join(cards) or '<p class="meta">Geen gesprekken gevonden.</p>'}
 <p class="pager">{' &nbsp; '.join(pager)}</p>"""
     return page("Studiekompas gesprekken", body)

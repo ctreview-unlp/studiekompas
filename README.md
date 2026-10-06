@@ -118,6 +118,17 @@ Environment variables (set in Railway):
 Without the SMTP variables, lead emails are skipped (logged) and leads are
 still visible in `/admin`.
 
+## Data retention
+
+Every day, the scraper job (`start.sh`, `SERVICE_ROLE=scraper`) first runs
+`python -m app.retention`, which deletes:
+
+- conversations without a lead older than `RETENTION_CONVERSATION_MONTHS` (default 6)
+- leads older than `RETENTION_LEAD_MONTHS` (default 12), together with their conversation
+
+New leads get `retention_until` set when they're saved. Set `RETENTION_LEAD_MONTHS`
+on both the web and scraper services if you change it, so the two agree.
+
 ## Tests
 
 ```bash
