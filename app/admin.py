@@ -1,51 +1,103 @@
 """
 Advisor overview: a password-protected list of conversations and leads.
 
-Plain server-rendered HTML behind HTTP Basic auth, so advisors only need a
-browser and the shared password. Disabled entirely unless ADMIN_PASSWORD is
-set. Every value from the database is HTML-escaped, since transcripts
-contain whatever visitors typed.
+Plain server-rendered HTML, so advisors only need a browser and the shared
+password. Disabled entirely unless ADMIN_PASSWORD is set. Every value from
+the database is HTML-escaped, since transcripts contain whatever visitors
+typed.
 
-    ADMIN_USERNAME  (default "unlp")
-    ADMIN_PASSWORD  required to enable /admin
+Login is a form that sets a signed session cookie, so advisors can log out
+and sessions expire on their own. The signing key is derived from the
+password, so changing ADMIN_PASSWORD logs everyone out.
+
+    ADMIN_USERNAME       (default "unlp")
+    ADMIN_PASSWORD       required to enable /admin
+    ADMIN_SESSION_HOURS  (default 8) how long a login stays valid
 """
 
+import hashlib
+import hmac
 import os
 import secrets
+import time
 from html import escape
+from urllib.parse import parse_qs, quote
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import HTMLResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.notify import STEP_LABELS
+from app.rate_limit import RateLimiter, client_ip
 from app.retention import conversation_months, lead_months
 from app.storage import get_conversation_detail, list_conversations
 
 router = APIRouter(prefix="/admin")
-security = HTTPBasic(realm="Studiekompas")
 
 PAGE_SIZE = 50
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
+SESSION_COOKIE = "studiekompas_admin"
+# Slows down password guessing: 10 login attempts per IP per 15 minutes.
+login_limiter = RateLimiter(max_requests=10, window_seconds=900)
 
 
-def require_advisor(credentials: HTTPBasicCredentials = Depends(security)) -> None:
+def admin_password() -> str:
     password = os.environ.get("ADMIN_PASSWORD")
     if not password:
         raise HTTPException(status_code=404)
-    username = os.environ.get("ADMIN_USERNAME", "unlp")
-    valid = secrets.compare_digest(credentials.username.encode(), username.encode()) & \
-        secrets.compare_digest(credentials.password.encode(), password.encode())
-    if not valid:
-        raise HTTPException(status_code=401, headers={"WWW-Authenticate": 'Basic realm="Studiekompas"'})
+    return password
+
+
+def session_hours() -> float:
+    return float(os.environ.get("ADMIN_SESSION_HOURS", "8"))
+
+
+def sign(expires_at: int, password: str) -> str:
+    key = hashlib.sha256(b"studiekompas-admin-session:" + password.encode()).digest()
+    return hmac.new(key, str(expires_at).encode(), hashlib.sha256).hexdigest()
+
+
+def make_session(password: str) -> str:
+    expires_at = int(time.time() + session_hours() * 3600)
+    return f"{expires_at}.{sign(expires_at, password)}"
+
+
+def valid_session(token: str | None, password: str) -> bool:
+    try:
+        expires_part, signature = (token or "").split(".", 1)
+        expires_at = int(expires_part)
+    except ValueError:
+        return False
+    return expires_at > time.time() and hmac.compare_digest(signature, sign(expires_at, password))
+
+
+def safe_next(target: str | None) -> str:
+    """Only redirect back into /admin after login, never to another site."""
+    if target and target.startswith("/admin") and not target.startswith("/admin/login"):
+        return target
+    return "/admin"
+
+
+def require_advisor(request: Request) -> None:
+    password = admin_password()
+    if not valid_session(request.cookies.get(SESSION_COOKIE), password):
+        target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        raise HTTPException(status_code=303, headers={"Location": f"/admin/login?next={quote(target)}"})
+
+
+def is_local(request: Request) -> bool:
+    return request.url.hostname in ("localhost", "127.0.0.1")
 
 
 def fmt_time(value) -> str:
     return value.astimezone(LOCAL_TZ).strftime("%d-%m-%Y %H:%M") if value else "-"
 
 
-def page(title: str, body: str) -> HTMLResponse:
+def page(title: str, body: str, logged_in: bool = True) -> HTMLResponse:
+    logout_button = (
+        '<form method="post" action="/admin/logout"><button type="submit">Log uit</button></form>'
+        if logged_in else ""
+    )
     html = f"""<!doctype html>
 <html lang="nl">
 <head>
@@ -59,7 +111,19 @@ def page(title: str, body: str) -> HTMLResponse:
   * {{ box-sizing: border-box; }}
   body {{ margin:0; background:var(--bg); color:var(--ink);
          font:15px/1.5 -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; }}
-  header {{ background:var(--navy); color:#FAF7F2; padding:14px 16px; }}
+  header {{ background:var(--navy); color:#FAF7F2; padding:14px 16px; display:flex;
+           align-items:center; justify-content:space-between; gap:12px; }}
+  header form {{ margin:0; }}
+  header button {{ background:transparent; color:#FAF7F2; border:1px solid rgba(250,247,242,.5);
+                  border-radius:8px; padding:5px 12px; font:inherit; cursor:pointer; }}
+  header button:hover {{ background:rgba(250,247,242,.12); }}
+  .login {{ max-width:360px; margin:40px auto; }}
+  .login label {{ display:block; margin:12px 0 4px; }}
+  .login input {{ width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:8px;
+                 font:inherit; background:#fff; color:var(--ink); }}
+  .login button {{ margin-top:16px; width:100%; padding:10px; border:none; border-radius:8px;
+                  background:var(--navy); color:#FAF7F2; font:inherit; font-weight:600; cursor:pointer; }}
+  .error {{ color:#A33A2B; }}
   header a {{ color:#FAF7F2; text-decoration:none; font-weight:600; }}
   main {{ max-width:960px; margin:0 auto; padding:20px 16px 48px; }}
   h1 {{ font-size:20px; margin:0 0 12px; }}
@@ -84,11 +148,68 @@ def page(title: str, body: str) -> HTMLResponse:
 </style>
 </head>
 <body>
-<header><a href="/admin">UNLP Studiekompas · gesprekken</a></header>
+<header><a href="/admin">UNLP Studiekompas · gesprekken</a>{logout_button}</header>
 <main>{body}</main>
 </body>
 </html>"""
-    return HTMLResponse(html)
+    # No caching, so the back button can't show conversations after logging out.
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+
+
+def login_page(next_url: str, error: str = "", status_code: int = 200) -> HTMLResponse:
+    body = f"""
+<form class="login card" method="post" action="/admin/login">
+  <h1>Inloggen</h1>
+  {f'<p class="error">{escape(error)}</p>' if error else ''}
+  <input type="hidden" name="next" value="{escape(next_url)}">
+  <label for="username">Gebruikersnaam</label>
+  <input id="username" name="username" autocomplete="username" required autofocus>
+  <label for="password">Wachtwoord</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <button type="submit">Inloggen</button>
+</form>"""
+    response = page("Inloggen · Studiekompas", body, logged_in=False)
+    response.status_code = status_code
+    return response
+
+
+@router.get("/login", response_class=HTMLResponse)
+def login_form(request: Request, next: str = "/admin"):
+    password = admin_password()
+    if valid_session(request.cookies.get(SESSION_COOKIE), password):
+        return RedirectResponse(safe_next(next), status_code=303)
+    return login_page(safe_next(next))
+
+
+@router.post("/login")
+async def login(request: Request):
+    password = admin_password()
+    # Parsed by hand to avoid adding python-multipart just for one form.
+    form = {k: v[0] for k, v in parse_qs((await request.body()).decode()).items()}
+    next_url = safe_next(form.get("next"))
+
+    if not login_limiter.allow(client_ip(request)):
+        return login_page(next_url, "Te veel pogingen. Probeer het over een kwartier opnieuw.", 429)
+
+    username = os.environ.get("ADMIN_USERNAME", "unlp")
+    valid = secrets.compare_digest(form.get("username", "").encode(), username.encode()) & \
+        secrets.compare_digest(form.get("password", "").encode(), password.encode())
+    if not valid:
+        return login_page(next_url, "Gebruikersnaam of wachtwoord klopt niet.", 401)
+
+    response = RedirectResponse(next_url, status_code=303)
+    response.set_cookie(
+        SESSION_COOKIE, make_session(password), max_age=int(session_hours() * 3600),
+        path="/admin", httponly=True, samesite="strict", secure=not is_local(request),
+    )
+    return response
+
+
+@router.post("/logout")
+def logout():
+    response = RedirectResponse("/admin/login", status_code=303)
+    response.delete_cookie(SESSION_COOKIE, path="/admin")
+    return response
 
 
 @router.get("", response_class=HTMLResponse, dependencies=[Depends(require_advisor)])

@@ -41,7 +41,7 @@ from app.admin import router as admin_router
 from app.leads import SAVE_LEAD_TOOL, InvalidLead, clean_lead
 from app.notify import send_lead_email
 from app.prompts import build_system_prompt, fetch_courses
-from app.rate_limit import RateLimiter
+from app.rate_limit import RateLimiter, client_ip
 from app.storage import (
     get_conversation, get_conversation_id, record_consent, save_lead, save_summary,
     save_transcript,
@@ -100,14 +100,6 @@ def trim_history(history: list[dict], max_messages: int) -> list[dict]:
     while trimmed and trimmed[0].get("role") != "user":
         trimmed = trimmed[1:]
     return trimmed
-
-
-def client_ip(request: Request) -> str:
-    """Railway sits behind a proxy, so the real visitor IP is in X-Forwarded-For."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
 
 
 def append_missing_info_button(reply_text: str, courses: list[dict], already_shown: set[str]) -> str:

@@ -102,7 +102,7 @@ tech stack this scaffold is built against.
   recommended course, next step and persona guess onto the conversation
   (`app/summarize.py`).
 - **Advisor email:** a new lead triggers an email to the advisors (`app/notify.py`).
-- **Overview:** advisors read conversations and leads at `/admin` (`app/admin.py`).
+- **Overview:** advisors log in at `/admin` to read conversations and leads, and log out with the "Log uit" button (`app/admin.py`).
 
 Environment variables (set in Railway):
 
@@ -110,6 +110,7 @@ Environment variables (set in Railway):
 |---|---|
 | `ADMIN_PASSWORD` | Enables `/admin`; without it the page returns 404 |
 | `ADMIN_USERNAME` | Login name for `/admin` (default `unlp`) |
+| `ADMIN_SESSION_HOURS` | How long an `/admin` login stays valid (default 8); changing `ADMIN_PASSWORD` logs everyone out |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | Mail server for lead emails (port defaults to 587, STARTTLS) |
 | `SMTP_FROM` | Sender address (defaults to `SMTP_USERNAME`) |
 | `LEAD_NOTIFY_TO` | Comma-separated advisor addresses that receive lead emails |

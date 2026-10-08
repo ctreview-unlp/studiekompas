@@ -15,6 +15,8 @@ import threading
 import time
 from collections import defaultdict, deque
 
+from fastapi import Request
+
 
 class RateLimiter:
     def __init__(self, max_requests: int, window_seconds: float):
@@ -40,3 +42,11 @@ class RateLimiter:
                 for k in [k for k, v in self._hits.items() if not v or v[-1] <= cutoff]:
                     del self._hits[k]
             return True
+
+
+def client_ip(request: Request) -> str:
+    """Railway sits behind a proxy, so the real visitor IP is in X-Forwarded-For."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
