@@ -1,27 +1,63 @@
-from app.main import append_missing_info_button, trim_history
+from app.course_links import link_course_names
+from app.main import trim_history
 from app.rate_limit import RateLimiter
 
 COURSES = [
     {"name": "NLP Practitioner", "url": "https://unlp.nl/practitioner"},
-    {"name": "NLP Coachopleiding", "url": "https://unlp.nl/coach"},
+    {"name": "NLP Practitioner Intensief", "url": "https://unlp.nl/intensief"},
+    {"name": "Systemisch Coachen", "url": "https://unlp.nl/systemisch"},
+    {"name": "Teamcoaching", "url": None},
 ]
 
 
-def test_info_button_added_on_first_mention():
-    reply = append_missing_info_button("De NLP Practitioner is een goede start.", COURSES, set())
-    assert reply.endswith("[Bekijk de opleiding](https://unlp.nl/practitioner)")
+def test_every_mentioned_course_is_linked():
+    text = "Je kunt kiezen tussen de NLP Practitioner en Systemisch Coachen."
+    assert link_course_names(text, COURSES) == (
+        "Je kunt kiezen tussen de [NLP Practitioner](https://unlp.nl/practitioner) "
+        "en [Systemisch Coachen](https://unlp.nl/systemisch)."
+    )
 
 
-def test_info_button_not_added_twice_for_same_course():
-    shown = set()
-    append_missing_info_button("De NLP Practitioner past bij je.", COURSES, shown)
-    reply = append_missing_info_button("Bij de NLP Practitioner leer je veel.", COURSES, shown)
-    assert "](" not in reply
+def test_longest_course_name_wins():
+    text = "De NLP Practitioner Intensief duurt korter."
+    assert link_course_names(text, COURSES) == (
+        "De [NLP Practitioner Intensief](https://unlp.nl/intensief) duurt korter."
+    )
 
 
-def test_info_button_skipped_when_reply_already_has_a_button():
-    text = "Schrijf je in voor de NLP Practitioner. [Inschrijven](https://unlp.nl/inschrijven)"
-    assert append_missing_info_button(text, COURSES, set()) == text
+def test_course_linked_once_and_case_kept():
+    text = "De nlp practitioner is fijn. Na de NLP Practitioner kun je verder."
+    linked = link_course_names(text, COURSES)
+    assert linked.count("](https://unlp.nl/practitioner)") == 1
+    assert linked.startswith("De [nlp practitioner](")
+
+
+def test_existing_links_and_courses_without_url_are_left_alone():
+    text = (
+        "Bij Teamcoaching of de NLP Practitioner kun je je inschrijven.\n\n"
+        "[Inschrijven voor NLP Practitioner](https://unlp.nl/checkout/1)"
+    )
+    linked = link_course_names(text, COURSES)
+    assert "[Teamcoaching]" not in linked
+    assert linked.endswith("[Inschrijven voor NLP Practitioner](https://unlp.nl/checkout/1)")
+    assert "[NLP Practitioner](https://unlp.nl/practitioner)" in linked
+
+
+def test_course_already_linked_by_model_is_not_linked_twice():
+    text = "Lees over de [NLP Practitioner](https://unlp.nl/practitioner). De NLP Practitioner duurt 7 dagen."
+    assert link_course_names(text, COURSES).count("](https://unlp.nl/practitioner)") == 1
+
+
+def test_certificate_names_and_quoted_labels_are_not_linked():
+    text = (
+        'Bij de online variant staat als certificering: NLP Practitioner (ABNLP). '
+        'Bij de andere staat "NLP Practitioner". De NLP Practitioner duurt 15 dagen.'
+    )
+    linked = link_course_names(text, COURSES)
+    assert "certificering: NLP Practitioner (ABNLP)" in linked
+    assert '"NLP Practitioner"' in linked
+    # The first mention that really means the course gets the link.
+    assert linked.endswith("De [NLP Practitioner](https://unlp.nl/practitioner) duurt 15 dagen.")
 
 
 def test_trim_history_keeps_recent_turns_and_starts_with_user():
@@ -45,3 +81,19 @@ def test_rate_limiter_blocks_after_limit_and_recovers_after_window():
     assert not limiter.allow("ip", now=2)
     assert limiter.allow("other-ip", now=2)
     assert limiter.allow("ip", now=61)
+
+
+def test_prices_are_listed_per_variant():
+    from app.course_data import summarize_prices
+    offers = [
+        {"variant": "Practitioner Intensief (8 dagen)", "price": 2750},
+        {"variant": "NLP Practitioner (15 dagen)", "price": 2995},
+        {"variant": "Inclusief:", "price": 2995},
+        {"variant": "NLP Practitioner Online (15 avonden)", "price": 1795},
+    ]
+    assert summarize_prices(offers) == (
+        "NLP Practitioner Online (15 avonden): € 1795; Practitioner Intensief (8 dagen): € 2750; "
+        "NLP Practitioner (15 dagen): € 2995; andere data (zie prijs per datum): € 2995"
+    )
+    assert summarize_prices([{"variant": "Inclusief:", "price": 1099}]) == "€ 1099"
+    assert summarize_prices([]) is None

@@ -28,6 +28,8 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
+from app.course_data import clean_variant, format_price
+
 load_dotenv()
 
 HEADERS = {
@@ -240,8 +242,12 @@ def parse_offers(soup: BeautifulSoup) -> list[dict]:
         trainer_links = article.select(".co-offer-teacherlist-data a")
         trainer = ", ".join(a.get_text(strip=True) for a in trainer_links) or None
 
-        variant_tag = article.select_one(".co-offer-priceinfo-data strong")
-        variant = variant_tag.get_text(strip=True) if variant_tag else None
+        # The first line of the price info names the variant on pages that
+        # list several (e.g. "Practitioner Intensief (8 dagen)"); elsewhere it
+        # is general text such as "Inclusief:", which clean_variant rejects.
+        priceinfo = article.select_one(".co-offer-priceinfo-data")
+        first_line = next(iter(priceinfo.stripped_strings), None) if priceinfo else None
+        variant = clean_variant(first_line)
 
         price_tag = article.select_one(".co-offer-price")
         price = parse_price_str(price_tag.get_text(strip=True) if price_tag else None)
@@ -269,6 +275,9 @@ def build_schedule_summary(offers: list[dict], max_items: int = 6) -> str | None
     """Short human-readable summary of the next few upcoming offers, for the
     system prompt. Full detail per offer lives in course_schedules.
 
+    Includes the variant and price per date, because one course page can
+    list variants at different prices (Intensief vs. regular vs. online).
+
     Includes the weekday pattern (lesdagen) and trainer so the advisor can
     correctly answer "weekend variant" / "doordeweekse variant" and
     trainer-specific questions using real data, and includes availability
@@ -285,6 +294,10 @@ def build_schedule_summary(offers: list[dict], max_items: int = 6) -> str | None
         d = o["start_date"]
         weekday = DUTCH_WEEKDAYS[d.weekday()]
         piece = f"{weekday} {d.day} {month_names_nl[d.month]} {d.year} ({o['location']}"
+        if o.get("variant"):
+            piece += f", variant: {o['variant']}"
+        if o.get("price") is not None:
+            piece += f", prijs: {format_price(o['price'])}"
         if o.get("availability_status") and o["availability_status"] != "beschikbaar":
             piece += f", {o['availability_status']}"
         if o.get("lesdagen"):
@@ -324,9 +337,13 @@ def scrape_course(name: str, url: str, category: str, retries: int = 2) -> dict:
     prerequisites = find_field_after_label(soup, "Vooropleiding")
     duration = find_field_after_label(soup, "Opleidingsduur")
     certification = find_field_after_label(soup, "Certificering")
-    price = extract_price(soup)
-
     offers = parse_offers(soup)
+    # A page can list variants at different prices, so the first € amount on
+    # the page is unreliable. Prefer the scheduled offers' prices (the lowest,
+    # as a "from" price); the prompt shows the price per variant separately.
+    offer_prices = [o["price"] for o in offers if o.get("price") is not None]
+    price = min(offer_prices) if offer_prices else extract_price(soup)
+
     upcoming_schedule = build_schedule_summary(offers)
 
     level = "Beginner" if not prerequisites or prerequisites.strip().lower() == "geen" else "Gevorderd"

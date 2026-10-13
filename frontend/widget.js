@@ -265,6 +265,14 @@
       .cta-button:hover {
         background: var(--sk-navy-dark);
       }
+      /* Links inside a sentence (course names) read as normal web links. */
+      .inline-link {
+        color: #1F5FBF;
+        font-weight: 600;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .inline-link:hover { color: #164A96; }
       button.cta-button {
         border: none;
         font-family: inherit;
@@ -406,6 +414,25 @@
     "Welkom bij het UNLP Studiekompas. Ik help je graag ontdekken welke opleiding het beste bij jou past. Mag ik eerst vragen wat jou vandaag naar onze website heeft gebracht?";
 
   const STORAGE_KEY = "studiekompas-session";
+
+  /** True if the link points at the site the widget is embedded on (www. ignored). */
+  function isSameSite(url) {
+    try {
+      const strip = (host) => host.replace(/^www\./, "");
+      return strip(new URL(url).hostname) === strip(window.location.hostname);
+    } catch {
+      return false;
+    }
+  }
+
+  /** True if nothing but whitespace or punctuation shares the line with text[start:end]. */
+  function isOnOwnLine(text, start, end) {
+    const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+    const lineEndAt = text.indexOf("\n", end);
+    const lineEnd = lineEndAt === -1 ? text.length : lineEndAt;
+    const rest = text.slice(lineStart, start) + text.slice(end, lineEnd);
+    return !/[\p{L}\p{N}]/u.test(rest);
+  }
 
   const ERROR_MESSAGE =
     "Er ging iets mis bij het verbinden met de adviseur. Probeer het over even nog eens, of mail ons direct. [Mail UNLP](mailto:info@unlp.nl)";
@@ -602,11 +629,13 @@
     }
 
     /**
-     * Renders bot text as plain text, EXCEPT for [label](target) patterns,
-     * which become real styled CTA buttons:
-     *   - http(s):// targets -> real links, open in a new tab
-     *   - mailto: targets    -> real links, open the mail client
-     *   - action:xxx targets -> buttons that trigger an in-chat action
+     * Renders bot text as plain text, EXCEPT for [label](target) patterns.
+     * A link on a line of its own becomes a styled button (enrolling, email);
+     * a link inside a sentence (course names) becomes blue link text.
+     *   - http(s):// targets -> links on the same site open in the same tab,
+     *                           so the chat carries over; others open a new tab
+     *   - mailto: targets    -> open the mail client
+     *   - action:xxx targets -> always a button that triggers an in-chat action
      *                           (e.g. a callback request) instead of navigating
      */
     renderBotMessage(container, text) {
@@ -627,15 +656,28 @@
           btn.textContent = label;
           btn.addEventListener("click", () => this.handleAction(actionName));
           container.appendChild(btn);
-        
+
         } else {
           const link = document.createElement("a");
           link.href = target;
-          link.className = "cta-button";
+          link.className = isOnOwnLine(text, match.index, match.index + match[0].length)
+            ? "cta-button"
+            : "inline-link";
           link.textContent = label;
           if (target.startsWith("http")) {
-            link.target = "_blank";
-            link.rel = "noopener noreferrer";
+            if (isSameSite(target)) {
+              // Same tab, so the conversation is still there on the next page.
+              // On phones the open chat would cover that page, so close it.
+              link.addEventListener("click", () => {
+                if (window.matchMedia("(max-width: 600px)").matches) {
+                  this.isOpen = false;
+                  this.saveSession();
+                }
+              });
+            } else {
+              link.target = "_blank";
+              link.rel = "noopener noreferrer";
+            }
           }
           if (target.startsWith("mailto:")) {
             // mailto: links silently do nothing if the visitor has no mail

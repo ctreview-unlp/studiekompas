@@ -60,7 +60,7 @@ def setup(monkeypatch):
     monkeypatch.setattr(main, "get_conversation", db.get_conversation)
     monkeypatch.setattr(main, "save_transcript", db.save_transcript)
     monkeypatch.setattr(main, "fetch_courses", lambda _db: COURSES)
-    monkeypatch.setattr(main.claude.messages, "create", fake_create)
+    monkeypatch.setattr(main.claude.beta.messages, "create", fake_create)
     monkeypatch.setattr(main, "chat_limiter", RateLimiter(max_requests=100, window_seconds=60))
     monkeypatch.setattr(main, "save_lead", lambda _db, _sid, lead: leads.append(lead) or 1)
     monkeypatch.setattr(main, "summarize_conversation",
@@ -82,7 +82,29 @@ def test_successful_chat_saves_transcript_and_caches_system_prompt(setup):
     assert res.status_code == 200
     assert res.json()["reply"] == "Wat brengt je hier vandaag?"
     assert [t["role"] for t in setup.db.saved] == ["user", "assistant"]
-    assert setup.calls[0]["system"][0]["cache_control"] == {"type": "ephemeral"}
+    call = setup.calls[0]
+    assert call["model"] == "claude-sonnet-5-5"
+    assert call["output_config"] == {"effort": "low"}
+    assert call["fallbacks"] == "default"
+    assert call["system"][0]["cache_control"] == {"type": "ephemeral"}
+
+
+def test_thinking_block_before_text_is_skipped(setup):
+    setup.replies[:] = [SimpleNamespace(
+        content=[Block(type="thinking", thinking="", signature="sig"), Block(type="text", text="Hallo!")],
+        stop_reason="end_turn",
+    )]
+    assert post_chat(setup.client).json()["reply"] == "Hallo!"
+
+
+def test_refusal_gives_friendly_reply_instead_of_error(setup):
+    setup.replies[:] = [SimpleNamespace(
+        content=[], stop_reason="refusal", stop_details=SimpleNamespace(category="general_harms"),
+    )]
+    res = post_chat(setup.client)
+
+    assert res.status_code == 200
+    assert "mailto:info@unlp.nl" in res.json()["reply"]
 
 
 def test_chat_refused_without_consent(setup):
@@ -116,7 +138,7 @@ def test_claude_failure_returns_503_and_saves_nothing(setup, monkeypatch):
         request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
         raise anthropic.APIConnectionError(request=request)
 
-    monkeypatch.setattr(main.claude.messages, "create", failing_create)
+    monkeypatch.setattr(main.claude.beta.messages, "create", failing_create)
     res = post_chat(setup.client)
 
     assert res.status_code == 503

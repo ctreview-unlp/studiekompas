@@ -38,6 +38,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.admin import router as admin_router
+from app.course_links import link_course_names
 from app.leads import SAVE_LEAD_TOOL, InvalidLead, clean_lead
 from app.notify import send_lead_email
 from app.prompts import build_system_prompt, fetch_courses
@@ -59,7 +60,12 @@ PUBLIC_BASE_URL = os.environ.get(
     "PUBLIC_BASE_URL", "https://studiekompas-production.up.railway.app"
 ).rstrip("/")
 
-MODEL = "claude-sonnet-4-5"
+MODEL = "claude-sonnet-5-5"
+# "low" is the recommended starting point for chat on Claude Sonnet 5.5: the
+# model skips thinking on most simple messages, which keeps replies quick.
+EFFORT = "low"
+# Retries a safety-classifier decline on another model (Claude API only).
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 # Comma-separated list of sites allowed to call the API from a browser.
 # The /demo page is served from this API's own origin, so it needs no entry.
@@ -76,6 +82,13 @@ MAX_HISTORY_MESSAGES = 30
 MAX_USER_TURNS = 40
 # Model calls per visitor message: one reply, plus a follow-up after a tool call.
 MAX_TOOL_ROUNDS = 3
+
+# Shown when the model declines to answer (stop_reason "refusal").
+REFUSAL_REPLY = (
+    "Daar kan ik je helaas niet mee helpen. Heb je een vraag over een opleiding, "
+    "dan denk ik graag met je mee, of neem contact op met een opleidingsadviseur. "
+    "[Mail een adviseur](mailto:info@unlp.nl)"
+)
 
 CONTACT_FALLBACK_REPLY = (
     "We hebben al een flink gesprek gevoerd. Om je verder goed te helpen, kun je "
@@ -100,40 +113,6 @@ def trim_history(history: list[dict], max_messages: int) -> list[dict]:
     while trimmed and trimmed[0].get("role") != "user":
         trimmed = trimmed[1:]
     return trimmed
-
-
-def append_missing_info_button(reply_text: str, courses: list[dict], already_shown: set[str]) -> str:
-    """
-    Safety net: if the reply discusses a specific course by name but doesn't
-    already include a CTA button, add one linking to that course's info page.
-
-    Only adds the button the FIRST time a given course is mentioned in a
-    conversation — a real advisor wouldn't hand you the same link every
-    single time a course comes up, and doing so on every mention (including
-    passing comparisons like "what's the difference between X and Y") reads
-    as pushy, which cuts against the whole "never sell" principle. `already_shown`
-    is a set of course names already given a button earlier in this conversation.
-
-    Relying purely on the system prompt instruction to include this button
-    isn't 100% reliable — LLMs don't follow even strongly-worded "always do
-    X" instructions with perfect consistency. This deterministic check
-    catches whatever slips through the prompt, so the button reliably
-    appears at least once, without repeating unnecessarily.
-    """
-    if "](" in reply_text:
-        return reply_text  # already has a CTA button (e.g. enrollment), don't add a second
-
-    for course in courses:
-        name_lower = course["name"].lower()
-        if (
-            course.get("url")
-            and name_lower in reply_text.lower()
-            and name_lower not in already_shown
-        ):
-            already_shown.add(name_lower)
-            return reply_text + f"\n\n[Bekijk de opleiding]({course['url']})"
-
-    return reply_text
 
 
 # Limited to the UNLP website (see ALLOWED_ORIGINS) — see Ch. 18 (data
@@ -231,9 +210,13 @@ def chat(req: ChatRequest, request: Request, background: BackgroundTasks):
     reply_parts = []
     try:
         for _ in range(MAX_TOOL_ROUNDS):
-            response = claude.messages.create(
+            response = claude.beta.messages.create(
                 model=MODEL,
-                max_tokens=1024,
+                # Thinking counts towards max_tokens, so leave room beyond the reply.
+                max_tokens=4000,
+                output_config={"effort": EFFORT},
+                betas=[FALLBACK_BETA],
+                fallbacks="default",
                 tools=[SAVE_LEAD_TOOL],
                 # The system prompt (instructions + full course list) is identical
                 # for every request until the course data changes, so cache it.
@@ -244,14 +227,26 @@ def chat(req: ChatRequest, request: Request, background: BackgroundTasks):
                 }],
                 messages=messages,
             )
+            if response.stop_reason == "refusal":
+                logger.warning(
+                    "Refusal (category=%s) for session %s",
+                    getattr(response.stop_details, "category", None), session_id,
+                )
+                reply_parts = [REFUSAL_REPLY]
+                break
+            # Read blocks by type: a response can start with a (usually empty) thinking block.
             text = "".join(b.text for b in response.content if b.type == "text").strip()
             if text:
                 reply_parts.append(text)
             if response.stop_reason != "tool_use":
                 break
             tool_results = [run_tool(b) for b in response.content if b.type == "tool_use"]
+            # Thinking blocks go back unchanged with the rest of the turn; the
+            # fallback marker is an audit block that may be dropped.
             messages = messages + [
-                {"role": "assistant", "content": [b.model_dump(exclude_none=True) for b in response.content]},
+                {"role": "assistant", "content": [
+                    b.model_dump(exclude_none=True) for b in response.content if b.type != "fallback"
+                ]},
                 {"role": "user", "content": tool_results},
             ]
     except anthropic.APIError:
@@ -266,16 +261,7 @@ def chat(req: ChatRequest, request: Request, background: BackgroundTasks):
         logger.warning("Empty reply (stop_reason=%s) for session %s", response.stop_reason, session_id)
         raise HTTPException(status_code=503, detail="empty_reply")
 
-    # Figure out which courses have already gotten an info-page button
-    # earlier in this conversation, so we don't repeat it unnecessarily.
-    already_shown = set()
-    for turn in history:
-        if turn.get("role") == "assistant" and "](" in turn.get("content", ""):
-            for course in courses:
-                if course["name"].lower() in turn["content"].lower():
-                    already_shown.add(course["name"].lower())
-
-    reply_text = append_missing_info_button(reply_text, courses, already_shown)
+    reply_text = link_course_names(reply_text, courses)
 
     history.append({"role": "assistant", "content": reply_text})
     save_transcript(DATABASE_URL, session_id, history)
