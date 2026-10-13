@@ -9,6 +9,8 @@
  *   position="bottom-left"   -> sit in the bottom-left corner instead
  *   offset-bottom="100"      -> distance from the bottom in px (e.g. to stack above another widget)
  *   offset-side="24"         -> distance from the left/right edge in px
+ *   launcher-label="..."     -> text next to the closed button (default
+ *                               "Welke opleiding past bij mij?"); "none" hides it
  *
  * Talks to two backend endpoints:
  *   POST {api-url}/api/consent  { session_id }              -> { status }
@@ -80,6 +82,38 @@
         width: 28px;
         height: 28px;
         transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      /* Short label beside the closed button, so visitors can tell the study
+         advisor apart from UNLP's live chat with the team (Trengo). */
+      .launcher-label {
+        position: absolute;
+        bottom: 30px;
+        right: 72px;
+        transform: translateY(50%);
+        width: max-content;
+        /* Leaves room for another chat button (e.g. Trengo) in the opposite
+           corner; on narrow screens the text wraps onto two lines instead. */
+        max-width: min(260px, calc(100vw - 200px));
+        text-align: left;
+        background: #FFFFFF;
+        color: var(--sk-navy);
+        border: 1px solid var(--sk-border);
+        border-radius: 999px;
+        padding: 8px 14px;
+        font: 600 14px/1.2 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        box-shadow: 0 4px 14px rgba(27, 42, 77, 0.18);
+        cursor: pointer;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+      }
+      :host([position="bottom-left"]) .launcher-label {
+        right: auto;
+        left: 72px;
+      }
+      .launcher-label:hover { border-color: var(--sk-navy); }
+      .launcher-label.hidden {
+        opacity: 0;
+        transform: translateY(calc(50% + 4px));
+        pointer-events: none;
       }
       .launcher.open svg {
         transform: rotate(135deg);
@@ -318,6 +352,7 @@
       }
     </style>
 
+    <button class="launcher-label" type="button" tabindex="-1" aria-hidden="true"></button>
     <button class="launcher" aria-label="Open Studiekompas chat" aria-expanded="false">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <circle cx="12" cy="12" r="9.25" stroke="#FAF7F2" stroke-width="1.4"/>
@@ -444,6 +479,16 @@
       if (offsetSide) this.style.setProperty("--sk-offset-side", `${parseInt(offsetSide, 10)}px`);
 
       this.launcher = this.shadowRoot.querySelector(".launcher");
+      this.launcherLabel = this.shadowRoot.querySelector(".launcher-label");
+      // Non-breaking space keeps "bij mij?" together when the label wraps on phones.
+      const labelText = this.getAttribute("launcher-label") ?? "Welke opleiding past bij\u00A0mij?";
+      if (labelText && labelText !== "none") {
+        this.launcherLabel.textContent = labelText;
+        this.launcher.setAttribute("aria-label", `Studiekompas: ${labelText}`);
+      } else {
+        this.launcherLabel.remove();
+        this.launcherLabel = null;
+      }
       this.panel = this.shadowRoot.querySelector(".panel");
       this.messagesEl = this.shadowRoot.querySelector("#messages");
       this.input = this.shadowRoot.querySelector("#input");
@@ -455,6 +500,7 @@
       this.humanRequestEl = this.shadowRoot.querySelector(".human-request");
 
       this.launcher.addEventListener("click", () => this.toggle());
+      this.launcherLabel?.addEventListener("click", () => this.toggle());
       this.sendBtn.addEventListener("click", () => this.sendMessage());
       this.humanBtn.addEventListener("click", () => this.requestHuman());
       this.consentAcceptBtn.addEventListener("click", () => this.acceptConsent());
@@ -476,6 +522,7 @@
       this.launcher.classList.toggle("open", this.isOpen);
       this.panel.classList.toggle("open", this.isOpen);
       this.launcher.setAttribute("aria-expanded", String(this.isOpen));
+      this.launcherLabel?.classList.toggle("hidden", this.isOpen);
       this.saveSession();
 
       if (this.isOpen && this.consentGiven) {
