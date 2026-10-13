@@ -10,14 +10,14 @@ def main(ctx=None):
         "studiekompas",
         source=github("ctreview-unlp/studiekompas", branch="main", checkSuites=False),
         start="bash start.sh",
-        replicas={ "sfo": 1 },
+        replicas={ "europe-west4-drams3a": 1 },
         env={ "ADMIN_PASSWORD": preserve(), "ANTHROPIC_API_KEY": preserve(), "APP_ENV": preserve(), "DATABASE_URL": preserve(), "VOYAGE_API_KEY": preserve() },
     )
     scraper = service(
         "studiekompas-scraper",
         source=github("ctreview-unlp/studiekompas", branch="main", checkSuites=False),
         start="bash start.sh",
-        replicas={ "sfo": 1 },
+        replicas={ "europe-west4-drams3a": 1 },
         deploy={ "cronSchedule": "0 3 * * *", "restartPolicyType": "NEVER" },
         env={ "DATABASE_URL": preserve(), "SERVICE_ROLE": preserve(), "VOYAGE_API_KEY": preserve() },
     )
