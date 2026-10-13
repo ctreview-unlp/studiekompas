@@ -39,6 +39,7 @@ from pydantic import BaseModel, Field
 
 from app.admin import router as admin_router
 from app.course_links import link_course_names
+from app.enrollment import enforce_enrollment_intent
 from app.leads import SAVE_LEAD_TOOL, InvalidLead, clean_lead
 from app.notify import send_lead_email
 from app.prompts import build_system_prompt, fetch_courses
@@ -261,6 +262,9 @@ def chat(req: ChatRequest, request: Request, background: BackgroundTasks):
         logger.warning("Empty reply (stop_reason=%s) for session %s", response.stop_reason, session_id)
         raise HTTPException(status_code=503, detail="empty_reply")
 
+    reply_text, removed = enforce_enrollment_intent(reply_text, history)
+    if removed:
+        logger.warning("Removed unrequested enrollment link for session %s", session_id)
     reply_text = link_course_names(reply_text, courses)
 
     history.append({"role": "assistant", "content": reply_text})
