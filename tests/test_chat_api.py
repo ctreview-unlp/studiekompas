@@ -178,7 +178,8 @@ def test_summary_refreshed_after_each_reply(setup):
     assert setup.emails == []
 
 
-def test_lead_saved_and_advisors_emailed(setup):
+def test_lead_saved_and_advisors_emailed(setup, monkeypatch):
+    monkeypatch.setattr(main, "LEAD_CAPTURE_ENABLED", True)
     setup.replies[:] = [
         tool_response({"name": "Sanne", "email": "Sanne@Example.nl", "contact_preference": "email",
                        "course_interest": "NLP Practitioner"}),
@@ -199,7 +200,8 @@ def test_lead_saved_and_advisors_emailed(setup):
     assert all(isinstance(t["content"], str) for t in setup.db.saved)
 
 
-def test_invalid_lead_is_not_saved_and_model_is_told(setup):
+def test_invalid_lead_is_not_saved_and_model_is_told(setup, monkeypatch):
+    monkeypatch.setattr(main, "LEAD_CAPTURE_ENABLED", True)
     setup.replies[:] = [
         tool_response({"name": "Sanne", "email": "sanne-at-example", "contact_preference": "email"}),
         text_response("Klopt je e-mailadres? Het lijkt niet helemaal goed te gaan."),
@@ -208,4 +210,22 @@ def test_invalid_lead_is_not_saved_and_model_is_told(setup):
 
     assert setup.leads == []
     assert setup.emails == []
+    assert setup.calls[1]["messages"][-1]["content"][0]["is_error"] is True
+
+
+def test_lead_capture_off_by_default_refers_to_email(setup):
+    post_chat(setup.client)
+    call = setup.calls[0]
+    assert "tools" not in call
+    system = call["system"][0]["text"]
+    assert "mailto:info@unlp.nl" in system and "save_lead" not in system
+
+
+def test_lead_tool_call_ignored_while_capture_is_off(setup):
+    setup.replies[:] = [
+        tool_response({"name": "Sanne", "email": "sanne@example.nl", "contact_preference": "email"}),
+        text_response("Je kunt het beste mailen naar info@unlp.nl."),
+    ]
+    post_chat(setup.client)
+    assert setup.leads == []
     assert setup.calls[1]["messages"][-1]["content"][0]["is_error"] is True

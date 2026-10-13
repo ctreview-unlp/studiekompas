@@ -61,6 +61,10 @@ PUBLIC_BASE_URL = os.environ.get(
     "PUBLIC_BASE_URL", "https://studiekompas-production.up.railway.app"
 ).rstrip("/")
 
+# Whether the advisor may collect contact details (save_lead). Off until the
+# team is notified of new leads; while off, it refers visitors to email.
+LEAD_CAPTURE_ENABLED = os.environ.get("LEAD_CAPTURE", "off").lower() in ("on", "true", "1")
+
 MODEL = "claude-sonnet-5-5"
 # "low" is the recommended starting point for chat on Claude Sonnet 5.5: the
 # model skips thinking on most simple messages, which keeps replies quick.
@@ -187,13 +191,13 @@ def chat(req: ChatRequest, request: Request, background: BackgroundTasks):
         return ChatResponse(reply=CONTACT_FALLBACK_REPLY)
 
     courses = fetch_courses(DATABASE_URL)
-    system_prompt = build_system_prompt(courses)
+    system_prompt = build_system_prompt(courses, lead_capture=LEAD_CAPTURE_ENABLED)
 
     saved_lead = {}
 
     def run_tool(block) -> dict:
         """Execute a tool call from the model and build its tool_result."""
-        if block.name != "save_lead":
+        if block.name != "save_lead" or not LEAD_CAPTURE_ENABLED:
             return {"type": "tool_result", "tool_use_id": block.id, "is_error": True,
                     "content": f"Onbekende tool: {block.name}"}
         try:
@@ -218,7 +222,7 @@ def chat(req: ChatRequest, request: Request, background: BackgroundTasks):
                 output_config={"effort": EFFORT},
                 betas=[FALLBACK_BETA],
                 fallbacks="default",
-                tools=[SAVE_LEAD_TOOL],
+                **({"tools": [SAVE_LEAD_TOOL]} if LEAD_CAPTURE_ENABLED else {}),
                 # The system prompt (instructions + full course list) is identical
                 # for every request until the course data changes, so cache it.
                 system=[{

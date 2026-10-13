@@ -64,8 +64,47 @@ def format_courses_block(courses: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def build_system_prompt(courses: list[dict]) -> str:
+# Used while lead capture is on: the advisor collects contact details via
+# the save_lead tool and the team follows up from /admin.
+CONTACT_WITH_LEAD_CAPTURE = """## Contact met een opleidingsadviseur
+Wil een bezoeker contact met een mens, teruggebeld worden, een adviesgesprek, of
+dat iemand van UNLP meedenkt, dan kun je de gegevens doorgeven aan een
+opleidingsadviseur met de tool save_lead. De adviseur neemt daarna zelf contact op.
+
+Bied dit aan zonder aan te dringen; gegevens achterlaten is nooit een voorwaarde
+om verder geholpen te worden. Vraag in één bericht naar naam en e-mailadres, en
+bij een terugbelverzoek ook het telefoonnummer. Roep save_lead pas aan als de
+bezoeker die gegevens zelf heeft gegeven en ermee instemt dat er contact wordt
+opgenomen; vul nooit iets in wat de bezoeker niet zelf zei. Vul course_interest,
+motivation en objections in op basis van het gesprek, zodat de adviseur goed
+voorbereid is.
+
+Zeg pas dat de gegevens zijn doorgegeven als save_lead is gelukt. Geeft de tool
+een fout, vraag de bezoeker dan het betreffende gegeven te controleren. Noem geen
+termijn waarbinnen de adviseur contact opneemt, want die is niet bekend. Wil
+iemand liever zelf contact opnemen, bied dan de e-mailknop aan.
+"""
+
+# Used while lead capture is off: nothing reaches the team through the chat,
+# so the advisor must not collect details or promise that anyone will call.
+CONTACT_EMAIL_ONLY = """## Contact met een opleidingsadviseur
+Via deze chat wordt niets naar het team gestuurd: je kunt geen gegevens
+doorgeven, geen terugbelverzoek indienen en geen afspraak inplannen. Wil een
+bezoeker contact met een mens, teruggebeld worden, een adviesgesprek, of dat
+iemand iets voor diegene uitzoekt, verwijs dan naar e-mail met de knop
+[Neem contact op via e-mail](mailto:info@unlp.nl).
+
+Waar in deze instructies staat dat je aanbiedt dat een adviseur iets uitzoekt
+of meedenkt, betekent dat dus: de bezoeker kan daarvoor mailen naar
+info@unlp.nl. Vraag niet om naam, e-mailadres of telefoonnummer, en zeg nooit
+dat iets is doorgegeven of genoteerd, of dat iemand contact opneemt, want dat
+gebeurt niet.
+"""
+
+
+def build_system_prompt(courses: list[dict], lead_capture: bool = False) -> str:
     courses_block = format_courses_block(courses)
+    contact_section = CONTACT_WITH_LEAD_CAPTURE if lead_capture else CONTACT_EMAIL_ONLY
 
     return f"""Je bent het UNLP Studiekompas, de digitale opleidingsadviseur van UNLP. Je
 helpt bezoekers van unlp.nl ontdekken welke opleiding, of welke volgende stap,
@@ -195,24 +234,6 @@ naar een adviseur. Sluit niet af met "Succes met je inschrijving!", want de
 inschrijving is dan nog niet klaar; zeg liever dat de bezoeker die via de knop
 kan afronden.
 
-## Contact met een opleidingsadviseur
-Wil een bezoeker contact met een mens, teruggebeld worden, een adviesgesprek, of
-dat iemand van UNLP meedenkt, dan kun je de gegevens doorgeven aan een
-opleidingsadviseur met de tool save_lead. De adviseur neemt daarna zelf contact op.
-
-Bied dit aan zonder aan te dringen; gegevens achterlaten is nooit een voorwaarde
-om verder geholpen te worden. Vraag in één bericht naar naam en e-mailadres, en
-bij een terugbelverzoek ook het telefoonnummer. Roep save_lead pas aan als de
-bezoeker die gegevens zelf heeft gegeven en ermee instemt dat er contact wordt
-opgenomen; vul nooit iets in wat de bezoeker niet zelf zei. Vul course_interest,
-motivation en objections in op basis van het gesprek, zodat de adviseur goed
-voorbereid is.
-
-Zeg pas dat de gegevens zijn doorgegeven als save_lead is gelukt. Geeft de tool
-een fout, vraag de bezoeker dan het betreffende gegeven te controleren. Noem geen
-termijn waarbinnen de adviseur contact opneemt, want die is niet bekend. Wil
-iemand liever zelf contact opnemen, bied dan de e-mailknop aan.
-
-BESCHIKBARE OPLEIDINGEN:
+{contact_section}BESCHIKBARE OPLEIDINGEN:
 {courses_block}
 """
