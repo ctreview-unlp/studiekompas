@@ -97,3 +97,32 @@ def test_prices_are_listed_per_variant():
     )
     assert summarize_prices([{"variant": "Inclusief:", "price": 1099}]) == "€ 1099"
     assert summarize_prices([]) is None
+
+
+def test_every_option_in_a_variant_list_is_linked():
+    courses = [
+        {"name": "NLP Practitioner", "url": "https://unlp.nl/practitioner"},
+        {"name": "NLP Practitioner Intensief", "url": "https://unlp.nl/intensief"},
+        {"name": "NLP Practitioner Online", "url": "https://unlp.nl/online"},
+    ]
+    text = (
+        "De NLP Practitioner heeft meerdere varianten, elk met een eigen prijs:\n\n"
+        "NLP Practitioner Online (15 avonden): € 1795\n"
+        "Practitioner Intensief (8 dagen): € 2750\n"
+        "NLP Practitioner (15 dagen): € 2995"
+    )
+    assert link_course_names(text, courses).split("\n") == [
+        "De [NLP Practitioner](https://unlp.nl/practitioner) heeft meerdere varianten, elk met een eigen prijs:",
+        "",
+        "[NLP Practitioner Online](https://unlp.nl/online) (15 avonden): € 1795",
+        "[Practitioner Intensief](https://unlp.nl/intensief) (8 dagen): € 2750",
+        "[NLP Practitioner](https://unlp.nl/practitioner) (15 dagen): € 2995",
+    ]
+
+
+def test_everyday_phrases_are_not_mistaken_for_courses():
+    courses = [{"name": "NLP voor Jongeren", "url": "https://unlp.nl/jongeren"}]
+    assert link_course_names("We hebben ook trainingen voor jongeren.", courses) == (
+        "We hebben ook trainingen voor jongeren."
+    )
+    assert "[NLP voor Jongeren](" in link_course_names("Bekijk NLP voor Jongeren.", courses)

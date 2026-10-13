@@ -21,6 +21,7 @@ Three kinds of data are extracted per course:
 
 import argparse
 import datetime
+from collections import Counter
 import re
 import time
 
@@ -77,6 +78,7 @@ COURSE_URLS = {
         ("Systemisch Werk in Organisaties", "https://unlp.nl/opleidingen/opleiding-systemisch-werk-in-organisaties/"),
         ("Samengestelde gezinnen en patchwork", "https://unlp.nl/opleidingen/workshop-samengestelde-systemen-stiefgezinnen-en-patchwork-families/"),
         ("Familieopstellingen avond", "https://unlp.nl/opleidingen/familieopstellingen-avond/"),
+        ("Workshop Organisatieopstellingen", "https://unlp.nl/opleidingen/1-daagse-introductie-in-systemisch-werk-in-organisaties/"),
     ],
     "Coaching": [
         ("Stress en Burn-out Coachopleiding", "https://unlp.nl/opleidingen/stress-en-burn-out-coach/"),
@@ -87,6 +89,7 @@ COURSE_URLS = {
         ("3-daagse Coachopleiding", "https://unlp.nl/opleidingen/3-daagse-nlp-coachopleiding/"),
         ("2-daagse opleiding Neurocoach", "https://unlp.nl/opleidingen/2-daagse-opleiding-neurocoach/"),
         ("Lichaamsgericht Coachen", "https://unlp.nl/opleidingen/4-daagse-lichaamsgericht-coachen-met-nlp/"),
+        ("NLP Coach opleiding met NOBCO accreditatie", "https://unlp.nl/opleidingen/nlp-coach/"),
     ],
     "Zakelijke trainingen": [
         ("Authentiek Presenteren", "https://unlp.nl/opleidingen/authentiek-presenteren/"),
@@ -117,6 +120,17 @@ COURSE_URLS = {
         ("New Code Training", "https://unlp.nl/opleidingen/nlp-new-code-training/"),
         ("NLP voor Jongeren", "https://unlp.nl/opleidingen/3-daagse-training-nlp-voor-jongeren/"),
         ("2-daagse Emotional Freedom Techniques (EFT)", "https://unlp.nl/opleidingen/2-daagse-eft-emotional-freedom-techniques/"),
+    ],
+    # Pages outside /opleidingen/. The information evening lists its dates as
+    # plain text lines instead of offer blocks (see parse_listed_dates).
+    "Kennismaken": [
+        ("Gratis NLP Informatieavond", "https://unlp.nl/kennismaken/informatieavonden/nlp-informatie-avond/"),
+    ],
+    "Bundels": [
+        ("Bundelpakketten NLP- en Systemische opleidingen", "https://unlp.nl/bundelpakketten/"),
+    ],
+    "Events": [
+        ("Droom Leef Geniet Festival", "https://unlp.nl/festival/"),
     ],
 }
 
@@ -152,11 +166,33 @@ def find_field_after_label(soup: BeautifulSoup, label: str) -> str | None:
     return text or None
 
 
+# An amount right after a price label, e.g. "Deelnameprijs € 695,-" or
+# "De investering in deze training is €695,-".
+LABELLED_PRICE = re.compile(
+    r"\b(?:deelnameprijs|investering|prijs|kosten)\b[^€.]{0,40}(€\s?[\d.,]+)", re.IGNORECASE
+)
+
+
 def extract_price(soup: BeautifulSoup) -> str | None:
-    """Grab the first € amount found on the page as a representative price."""
+    """
+    The page's price, for pages without scheduled offers. Pages often show
+    other amounts too (an optional add-on, a tax rule, other packages), so
+    the first € amount is unreliable. Uses, in order: the amount that most
+    often follows a price label (an add-on is usually mentioned once, the
+    course price in several places); otherwise the only amount on the page. A page
+    listing several products (e.g. the bundle packages, €3.000 to €11.400)
+    has no one price and gets None, so the advisor says it doesn't know
+    instead of presenting one product's price as the price of all.
+    """
     text = soup.get_text(" ", strip=True)
-    match = re.search(r"€\s?[\d.,]+", text)
-    return match.group(0) if match else None
+    labelled = Counter(parse_price_str(a) for a in LABELLED_PRICE.findall(text))
+    labelled.pop(None, None)
+    ranked = labelled.most_common(2)
+    if ranked and (len(ranked) == 1 or ranked[0][1] > ranked[1][1]):
+        return format_price(ranked[0][0])
+    amounts = re.findall(r"€\s?[\d.,]+", text)
+    distinct = {parse_price_str(a) for a in amounts} - {None}
+    return amounts[0] if len(distinct) == 1 else None
 
 
 def parse_price_str(price_str: str | None) -> float | None:
@@ -182,6 +218,42 @@ def parse_dutch_date(s: str | None) -> datetime.date | None:
         return datetime.date(int(year_str), month, int(day_str))
     except ValueError:
         return None
+
+
+# "Rotterdam, 13 oktober 2026 start om 19:30. Trainer: Nicolette van der Helm"
+LISTED_DATE_LINE = re.compile(
+    r"^(?P<location>[^,\n]{2,60}), (?P<date>\d{1,2} [a-z]+ \d{4}) start om (?P<time>\d{1,2}[:.]\d{2})"
+    r"(?:\.\s*Trainer: (?P<trainer>.+))?$",
+    re.IGNORECASE,
+)
+
+
+def parse_listed_dates(soup: BeautifulSoup) -> list[dict]:
+    """
+    Fallback for pages that list dates as plain text lines instead of Carta
+    offer blocks, like the free NLP information evening. Returns offers in
+    the same shape as parse_offers (without price, variant or lesdagen).
+    """
+    offers = []
+    for line in soup.get_text("\n", strip=True).split("\n"):
+        match = LISTED_DATE_LINE.match(line.strip())
+        if not match:
+            continue
+        start_date = parse_dutch_date(match.group("date"))
+        if not start_date:
+            continue
+        offers.append({
+            "location": match.group("location").strip(),
+            "start_date": start_date,
+            "trainer": (match.group("trainer") or "").strip().rstrip(".") or None,
+            "variant": None,
+            "price": None,
+            "enrollment_url": None,
+            "availability_status": None,
+            "lesdagen": [],
+            "start_time": match.group("time").replace(".", ":"),
+        })
+    return offers
 
 
 def parse_availability_status(article) -> str:
@@ -271,9 +343,28 @@ def parse_offers(soup: BeautifulSoup) -> list[dict]:
     return offers
 
 
-def build_schedule_summary(offers: list[dict], max_items: int = 6) -> str | None:
-    """Short human-readable summary of the next few upcoming offers, for the
-    system prompt. Full detail per offer lives in course_schedules.
+# Which upcoming dates the advisor sees per course: everything in the next
+# six months (what visitors usually ask about), at most MAX_DATES, and at
+# least MIN_DATES even when those are further away.
+SCHEDULE_HORIZON_DAYS = 183
+MAX_DATES = 20
+MIN_DATES = 3
+
+
+def select_upcoming(offers: list[dict], today: datetime.date | None = None) -> list[dict]:
+    today = today or datetime.date.today()
+    upcoming = sorted(
+        (o for o in offers if o["start_date"] and o["start_date"] >= today),
+        key=lambda o: o["start_date"],
+    )
+    horizon = today + datetime.timedelta(days=SCHEDULE_HORIZON_DAYS)
+    within = [o for o in upcoming if o["start_date"] <= horizon]
+    return upcoming[:max(MIN_DATES, min(len(within), MAX_DATES))]
+
+
+def build_schedule_summary(offers: list[dict]) -> str | None:
+    """Human-readable summary of the upcoming offers (see select_upcoming),
+    for the system prompt. Full detail per offer lives in course_schedules.
 
     Includes the variant and price per date, because one course page can
     list variants at different prices (Intensief vs. regular vs. online).
@@ -283,17 +374,18 @@ def build_schedule_summary(offers: list[dict], max_items: int = 6) -> str | None
     trainer-specific questions using real data, and includes availability
     status so it can mention urgency honestly without ever citing an exact
     spot count Carta doesn't publish."""
-    dated = [o for o in offers if o["start_date"]]
-    dated.sort(key=lambda o: o["start_date"])
+    dated = select_upcoming(offers)
     if not dated:
         return None
 
     month_names_nl = {v: k for k, v in DUTCH_MONTHS.items()}
     parts = []
-    for o in dated[:max_items]:
+    for o in dated:
         d = o["start_date"]
         weekday = DUTCH_WEEKDAYS[d.weekday()]
         piece = f"{weekday} {d.day} {month_names_nl[d.month]} {d.year} ({o['location']}"
+        if o.get("start_time"):
+            piece += f", aanvang {o['start_time']}"
         if o.get("variant"):
             piece += f", variant: {o['variant']}"
         if o.get("price") is not None:
@@ -337,12 +429,14 @@ def scrape_course(name: str, url: str, category: str, retries: int = 2) -> dict:
     prerequisites = find_field_after_label(soup, "Vooropleiding")
     duration = find_field_after_label(soup, "Opleidingsduur")
     certification = find_field_after_label(soup, "Certificering")
-    offers = parse_offers(soup)
+    offers = parse_offers(soup) or parse_listed_dates(soup)
     # A page can list variants at different prices, so the first € amount on
     # the page is unreliable. Prefer the scheduled offers' prices (the lowest,
     # as a "from" price); the prompt shows the price per variant separately.
     offer_prices = [o["price"] for o in offers if o.get("price") is not None]
     price = min(offer_prices) if offer_prices else extract_price(soup)
+    if price is None and name.lower().startswith("gratis"):
+        price = 0
 
     upcoming_schedule = build_schedule_summary(offers)
 
