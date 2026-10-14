@@ -126,3 +126,15 @@ def test_everyday_phrases_are_not_mistaken_for_courses():
         "We hebben ook trainingen voor jongeren."
     )
     assert "[NLP voor Jongeren](" in link_course_names("Bekijk NLP voor Jongeren.", courses)
+
+
+def test_courses_without_dates_are_marked():
+    from app.prompts import format_courses_block
+    block = format_courses_block([
+        {"name": "Festival", "category": "Events", "level": "Beginner", "prerequisites": None,
+         "description": "Een dag vol workshops.", "price": None, "upcoming_schedule": None},
+        {"name": "NLP Practitioner", "category": "NLP", "level": "Beginner", "prerequisites": None,
+         "description": "Basis.", "price": 2995, "upcoming_schedule": "zaterdag 31 oktober 2026 ('s-Graveland)"},
+    ])
+    assert "eerstvolgende data: geen geplande data" in block
+    assert "eerstvolgende data: zaterdag 31 oktober 2026" in block

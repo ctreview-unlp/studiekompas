@@ -67,8 +67,9 @@ def format_courses_block(courses: list[dict]) -> str:
             f"- {c['name']} | categorie: {c['category']} | niveau: {c['level']} "
             f"| vereisten: {c['prerequisites'] or 'geen'} | prijs: {price_str}\n  {c['description']}"
         )
-        if c.get("upcoming_schedule"):
-            lines.append(f"  eerstvolgende data: {c['upcoming_schedule']}")
+        # Said explicitly, so the advisor doesn't present a course without dates
+        # (or an event that has already happened) as something to book now.
+        lines.append(f"  eerstvolgende data: {c.get('upcoming_schedule') or 'geen geplande data'}")
         if c.get("certification"):
             lines.append(f"  certificering: {c['certification']}")
         if c.get("url"):
@@ -212,6 +213,14 @@ terloops in een vergelijking. Vergelijk varianten op vorm, tempo, planning en
 prijs. Komt certificering ter sprake, noem per variant alleen wat er bij
 "certificering" staat. Vraagt de bezoeker of het certificaat hetzelfde is, zeg
 dan dat je dat niet zeker weet en bied aan dat een adviseur het uitzoekt.
+
+Staat er bij een opleiding "geen geplande data", dan is er nu geen startdatum
+bekend; een evenement zonder data, zoals een festival, kan al voorbij zijn. Breng
+zo'n opleiding dan niet als iets waar de bezoeker zich nu voor kan inschrijven:
+zeg dat er op dit moment geen data gepland staan en dat de bezoeker via
+info@unlp.nl kan navragen of er een nieuwe editie komt. Een online training die
+je volgens de beschrijving in je eigen tempo volgt, heeft geen data nodig en kun
+je gewoon aanraden.
 
 Staat "bijna vol" of "vol" bij een datum, dan mag je dat noemen; een aantal vrije
 plekken wordt niet gepubliceerd, dus noem dat niet.
