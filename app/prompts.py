@@ -12,13 +12,25 @@ import psycopg
 from app.course_data import format_price, summarize_prices
 
 
+# The scraper runs nightly; a course missing from the last 36 hours of runs
+# (two missed nights) is no longer offered by the advisor.
+FRESHNESS_HOURS = 36
+
+
 def fetch_courses(database_url: str) -> list[dict]:
     with psycopg.connect(database_url) as conn:
         with conn.cursor() as cur:
+            # Only courses the scraper found in its recent runs: a page that
+            # failed to load two nights in a row is treated as no longer
+            # offered. Measured from the latest scrape rather than from now,
+            # so a scraper outage doesn't empty the course list.
             cur.execute(
                 "SELECT id, name, category, level, prerequisites, description, price, "
                 "upcoming_schedule, certification, url "
-                "FROM courses ORDER BY category, level, name;"
+                "FROM courses "
+                "WHERE updated_at >= (SELECT max(updated_at) FROM courses) - %s * interval '1 hour' "
+                "ORDER BY category, level, name;",
+                (FRESHNESS_HOURS,),
             )
             cols = ["id", "name", "category", "level", "prerequisites", "description", "price",
                     "upcoming_schedule", "certification", "url"]

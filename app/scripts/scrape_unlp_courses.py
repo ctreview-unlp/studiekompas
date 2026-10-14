@@ -24,6 +24,7 @@ import datetime
 from collections import Counter
 import re
 import time
+from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -94,7 +95,6 @@ COURSE_URLS = {
     "Zakelijke trainingen": [
         ("Authentiek Presenteren", "https://unlp.nl/opleidingen/authentiek-presenteren/"),
         ("Authentiek Presenteren (3 dagen)", "https://unlp.nl/opleidingen/authentiek-presenteren-2/"),
-        ("Conflicthantering op de Werkvloer", "https://unlp.nl/opleidingen/conflicthantering-op-de-werkvloer-2/"),
     ],
     "Online": [
         ("NLP Practitioner Online", "https://unlp.nl/opleidingen/nlp-practitioner-online/"),
@@ -403,12 +403,25 @@ def build_schedule_summary(offers: list[dict]) -> str | None:
     return "; ".join(parts)
 
 
+class PageGone(Exception):
+    """The course page no longer exists: the course has been taken offline."""
+
+
+def is_gone(resp: requests.Response) -> bool:
+    """404/410, or redirected to the homepage (how offline pages are often handled)."""
+    if resp.status_code in (404, 410):
+        return True
+    return bool(resp.history) and urlparse(resp.url).path in ("", "/")
+
+
 def scrape_course(name: str, url: str, category: str, retries: int = 2) -> dict:
     last_error = None
     resp = None
     for _ in range(retries):
         try:
             resp = requests.get(url, headers=HEADERS, timeout=25)
+            if is_gone(resp):
+                raise PageGone(f"{resp.status_code} {resp.url}")
             resp.raise_for_status()
             break
         except requests.exceptions.RequestException as e:
@@ -467,6 +480,7 @@ def main():
     args = parser.parse_args()
 
     results = []
+    gone = []
     for category, courses in COURSE_URLS.items():
         for name, url in courses:
             print(f"Scraping: {name} ({url})")
@@ -480,11 +494,19 @@ def main():
                 print(f"  upcoming_schedule:  {data['upcoming_schedule']!r}")
                 print(f"  offers found:       {len(data['offers'])}")
                 print(f"  description:        {(data['description'] or '')[:80]!r}...")
+            except PageGone as e:
+                print(f"  GONE (page offline, course will be removed): {e}")
+                gone.append(name)
             except Exception as e:
+                # Temporary failure: the course keeps its last data. The advisor
+                # stops offering it after it misses two nightly runs
+                # (see fetch_courses in app/prompts.py).
                 print(f"  FAILED: {e}")
             time.sleep(1)
 
     print(f"\nScraped {len(results)} course pages.")
+    if gone:
+        print(f"Pages offline: {', '.join(gone)}")
 
     if not args.ingest:
         print("\nRun with --ingest to write these into the database once the output above looks right.")
@@ -503,6 +525,11 @@ def main():
 
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
+            if gone:
+                # Schedules and chunks go with them (ON DELETE CASCADE).
+                cur.execute("DELETE FROM courses WHERE name = ANY(%s);", (gone,))
+                print(f"Removed {cur.rowcount} offline course(s) from the database.")
+
             course_ids = []
             chunk_texts = []
 

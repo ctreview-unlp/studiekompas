@@ -47,3 +47,18 @@ def test_upcoming_dates_six_months_capped_with_minimum():
     assert select_upcoming([day(-5), day(1)], today) == [day(1)]
     assert len(select_upcoming([day(i) for i in range(25)], today)) == 20
     assert len(select_upcoming([day(1)] + [day(300 + i) for i in range(5)], today)) == 3
+
+
+def test_offline_pages_are_recognised():
+    from types import SimpleNamespace
+    from app.scripts.scrape_unlp_courses import is_gone
+
+    page = lambda status, url, redirected=False: SimpleNamespace(
+        status_code=status, url=url, history=[object()] if redirected else []
+    )
+    assert is_gone(page(404, "https://unlp.nl/opleidingen/oud/"))
+    assert is_gone(page(410, "https://unlp.nl/opleidingen/oud/"))
+    assert is_gone(page(200, "https://unlp.nl/", redirected=True))
+    # A renamed course page that redirects to its new address is still a course.
+    assert not is_gone(page(200, "https://unlp.nl/opleidingen/nlp-coach/", redirected=True))
+    assert not is_gone(page(200, "https://unlp.nl/opleidingen/nlp-coach/"))
