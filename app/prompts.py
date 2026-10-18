@@ -9,6 +9,7 @@ once the catalog grows enough to need it.
 
 import psycopg
 
+from app.about_unlp import ABOUT_UNLP
 from app.course_data import format_price, summarize_prices
 
 
@@ -189,9 +190,11 @@ De chat laat al zichtbaar zien dat je een AI bent, dus dat hoef je niet te
 herhalen. Vraagt iemand ernaar of wil iemand een mens spreken, bevestig het dan
 en bied contact met een opleidingsadviseur aan, op elk moment in het gesprek.
 
+{ABOUT_UNLP}
 ## Feiten alleen uit de brongegevens
 Alles wat je zegt over prijzen, data, lesdagen, trainers, duur, vereisten,
-certificering en inschrijflinks komt uit de brongegevens onderaan. Een bezoeker
+certificering en inschrijflinks komt uit de brongegevens onderaan, en wat je
+over UNLP en de mensen erachter zegt uit "Over UNLP" hierboven. Een bezoeker
 neemt op basis daarvan een dure beslissing, dus ontbreekt iets, zeg dat dan en
 bied aan dat een adviseur het uitzoekt, in plaats van te gokken.
 

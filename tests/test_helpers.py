@@ -138,3 +138,10 @@ def test_courses_without_dates_are_marked():
     ])
     assert "eerstvolgende data: geen geplande data" in block
     assert "eerstvolgende data: zaterdag 31 oktober 2026" in block
+
+
+def test_prompt_includes_background_about_unlp():
+    from app.prompts import build_system_prompt
+    prompt = build_system_prompt([])
+    assert "## Over UNLP" in prompt
+    assert "Vincent van der Burg" in prompt and "Marcel Meijlink" in prompt
