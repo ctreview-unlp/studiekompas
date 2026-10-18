@@ -355,6 +355,27 @@
         cursor: default;
       }
 
+      /* Phones: the chat window spans the screen with a small margin, and its
+         height follows the visible screen as the browser bars come and go. */
+      @media (max-width: 600px) {
+        .panel {
+          width: calc(100vw - 24px);
+          max-width: none;
+          right: calc(12px - var(--sk-offset-side, 24px));
+          max-height: calc(100vh - 120px);
+          max-height: calc(100dvh - 120px);
+        }
+        :host([position="bottom-left"]) .panel {
+          right: auto;
+          left: calc(12px - var(--sk-offset-side, 24px));
+        }
+        /* iPhone Safari zooms in on fields with text under 16px and stays
+           zoomed in, which pushed the chat window off the screen. */
+        .composer textarea {
+          font-size: 16px;
+        }
+      }
+
       @media (prefers-reduced-motion: reduce) {
         .launcher svg, .panel, .dot { transition: none !important; animation: none !important; }
       }
