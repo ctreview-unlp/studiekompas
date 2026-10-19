@@ -157,6 +157,28 @@
         align-items: center;
         gap: 12px;
       }
+      .header .close {
+        margin-left: auto;
+        flex-shrink: 0;
+        width: 36px;
+        height: 36px;
+        border: none;
+        border-radius: 50%;
+        background: transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s ease;
+      }
+      .header .close:hover,
+      .header .close:focus-visible {
+        background: rgba(250, 247, 242, 0.14);
+      }
+      .header .close svg {
+        width: 18px;
+        height: 18px;
+      }
       .header .compass {
         width: 26px;
         height: 26px;
@@ -399,6 +421,11 @@
           <span class="name">UNLP Studiekompas</span>
           <span class="sub">Ontdek welke opleiding écht bij jou past</span>
         </div>
+        <button class="close" type="button" aria-label="Chat sluiten">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 6L18 18M18 6L6 18" stroke="#FAF7F2" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
 
       <div class="disclosure">
@@ -554,6 +581,11 @@
       this.humanRequestEl = this.shadowRoot.querySelector(".human-request");
 
       this.launcher.addEventListener("click", () => this.toggle());
+      // Closes the window only; the conversation stays for when it's reopened.
+      this.shadowRoot.querySelector(".header .close").addEventListener("click", () => {
+        if (this.isOpen) this.toggle();
+        this.launcher.focus();
+      });
       this.launcherLabel?.addEventListener("click", () => this.toggle());
       this.sendBtn.addEventListener("click", () => this.sendMessage());
       this.humanBtn.addEventListener("click", () => this.requestHuman());
