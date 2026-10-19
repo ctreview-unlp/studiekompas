@@ -504,16 +504,22 @@
 
     /** Re-renders a conversation saved on a previous page in this tab. */
     restoreSession(saved) {
+      let lastQuestion = null;
       if (saved.consentGiven) {
         this.consentGiven = true;
         this.showChat();
         this.history = Array.isArray(saved.messages) ? saved.messages : [];
         for (const { role, text } of this.history) {
-          this.appendMessage(role, text);
+          const el = this.appendMessage(role, text, { scroll: false });
+          if (role === "user") lastQuestion = el;
         }
       }
       if (saved.isOpen) {
         this.toggle();
+      }
+      // Back where the visitor left off: their last question, with the reply below.
+      if (lastQuestion) {
+        this.scrollToMessage(lastQuestion, { smooth: false });
       }
     }
 
@@ -631,8 +637,10 @@
     /**
      * Adds a message to the chat. With persist: true it is also kept in the
      * session so it reappears after a page load; error notices are not.
+     * With scroll: false the view stays put (used for replies, which are
+     * scrolled to via scrollToMessage instead).
      */
-    appendMessage(role, text, { persist = false } = {}) {
+    appendMessage(role, text, { persist = false, scroll = true } = {}) {
       if (persist) {
         this.history.push({ role, text });
         this.saveSession();
@@ -645,8 +653,24 @@
         div.textContent = text;
       }
       this.messagesEl.appendChild(div);
-      this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+      if (scroll) {
+        this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+      }
       return div;
+    }
+
+    /**
+     * Scrolls so `el` sits at the top of the chat. Used to show the visitor's
+     * question with the start of the reply below it, instead of jumping to
+     * the end of a long reply and making them read it from the bottom up.
+     */
+    scrollToMessage(el, { smooth = true } = {}) {
+      const offset = el.getBoundingClientRect().top - this.messagesEl.getBoundingClientRect().top;
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      this.messagesEl.scrollTo({
+        top: this.messagesEl.scrollTop + offset - 12,
+        behavior: smooth && !reduceMotion ? "smooth" : "auto",
+      });
     }
 
     /**
@@ -751,7 +775,7 @@
       const text = (overrideText ?? this.input.value).trim();
       if (!text || this.isSending) return;
 
-      this.appendMessage("user", text, { persist: true });
+      const questionEl = this.appendMessage("user", text, { persist: true });
       this.input.value = "";
       this.autoResize();
       this.isSending = true;
@@ -770,18 +794,20 @@
 
         typingEl.remove();
         if (res.status === 429) {
-          this.appendMessage("bot", RATE_LIMIT_MESSAGE);
+          this.appendMessage("bot", RATE_LIMIT_MESSAGE, { scroll: false });
         } else if (!res.ok) {
           throw new Error(`API returned ${res.status}`);
         } else {
           const data = await res.json();
-          this.appendMessage("bot", data.reply, { persist: true });
+          this.appendMessage("bot", data.reply, { persist: true, scroll: false });
         }
       } catch (err) {
         typingEl.remove();
-        this.appendMessage("bot", ERROR_MESSAGE);
+        this.appendMessage("bot", ERROR_MESSAGE, { scroll: false });
         console.error("Studiekompas widget error:", err);
       } finally {
+        // Keep the question in view; the visitor scrolls down to read the reply.
+        this.scrollToMessage(questionEl);
         this.isSending = false;
         this.sendBtn.disabled = false;
       }
