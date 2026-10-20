@@ -48,7 +48,8 @@
         --sk-bubble-user: #1B2A4D;
         --sk-bubble-bot: #F1ECE2;
         all: initial;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        /* Same font as unlp.nl, which loads Nunito Sans itself (under both names). */
+        font-family: 'Nunito Sans', 'NunitoSans', -apple-system, BlinkMacSystemFont, sans-serif;
         position: fixed;
         bottom: var(--sk-offset-bottom, 24px);
         right: var(--sk-offset-side, 24px);
@@ -100,7 +101,7 @@
         border: 1px solid var(--sk-border);
         border-radius: 999px;
         padding: 8px 14px;
-        font: 600 14px/1.2 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        font: 600 14px/1.2 'Nunito Sans', 'NunitoSans', -apple-system, BlinkMacSystemFont, sans-serif;
         box-shadow: 0 4px 14px rgba(27, 42, 77, 0.18);
         cursor: pointer;
         transition: opacity 0.2s ease, transform 0.2s ease;
@@ -190,10 +191,8 @@
         line-height: 1.25;
       }
       .header .titles .name {
-        font-family: 'Fraunces', Georgia, serif;
-        font-size: 16px;
-        font-weight: 600;
-        letter-spacing: 0.2px;
+        font-size: 17px;
+        font-weight: 700;
       }
       .header .titles .sub {
         font-size: 11.5px;
