@@ -512,16 +512,8 @@ def main():
         print("\nRun with --ingest to write these into the database once the output above looks right.")
         return
 
-    from app.scripts.ingest_courses import (
-        DATABASE_URL,
-        VOYAGE_API_KEY,
-        EMBED_MODEL,
-        build_chunk_text,
-    )
+    from app.scripts.ingest_courses import DATABASE_URL
     import psycopg
-    import voyageai
-
-    vo = voyageai.Client(api_key=VOYAGE_API_KEY)
 
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
@@ -529,9 +521,6 @@ def main():
                 # Schedules and chunks go with them (ON DELETE CASCADE).
                 cur.execute("DELETE FROM courses WHERE name = ANY(%s);", (gone,))
                 print(f"Removed {cur.rowcount} offline course(s) from the database.")
-
-            course_ids = []
-            chunk_texts = []
 
             for course in results:
                 if isinstance(course["price"], str):
@@ -560,6 +549,7 @@ def main():
                     course,
                 )
                 course_id = cur.fetchone()[0]
+                # Embeddings are no longer used; clear any left from older runs.
                 cur.execute("DELETE FROM course_chunks WHERE course_id = %s;", (course_id,))
                 cur.execute("DELETE FROM course_schedules WHERE course_id = %s;", (course_id,))
 
@@ -574,18 +564,6 @@ def main():
                          offer["variant"], offer["price"], offer["enrollment_url"],
                          offer["availability_status"]),
                     )
-
-                course_ids.append(course_id)
-                chunk_texts.append(build_chunk_text(course))
-
-            print(f"Embedding {len(chunk_texts)} courses in a single batch call...")
-            embeddings = vo.embed(chunk_texts, model=EMBED_MODEL, input_type="document").embeddings
-
-            for course_id, chunk_text, embedding in zip(course_ids, chunk_texts, embeddings):
-                cur.execute(
-                    "INSERT INTO course_chunks (course_id, chunk_text, embedding) VALUES (%s, %s, %s);",
-                    (course_id, chunk_text, embedding),
-                )
 
         conn.commit()
 

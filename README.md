@@ -16,8 +16,7 @@ Studiekompas/
 │   ├── data/
 │   │   └── courses_seed.json   # PLACEHOLDER course data — replace with your real export
 │   └── scripts/
-│       ├── ingest_courses.py   # loads courses_seed.json → embeds → stores in pgvector
-│       └── test_retrieval.py   # standalone retrieval smoke test (no LLM involved)
+│       └── ingest_courses.py   # loads courses_seed.json into the courses table
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -32,7 +31,7 @@ Studiekompas/
 2. **Copy environment variables:**
    ```bash
    cp .env.example .env
-   # then fill in DATABASE_URL, ANTHROPIC_API_KEY, VOYAGE_API_KEY
+   # then fill in DATABASE_URL, ANTHROPIC_API_KEY
    # optional: ALLOWED_ORIGINS — comma-separated sites allowed to embed the widget
    #           (defaults to https://unlp.nl,https://www.unlp.nl)
    ```
@@ -70,14 +69,6 @@ Studiekompas/
    python -m app.scripts.ingest_courses
    ```
    Safe to re-run any time the source data changes.
-
-3. **Prove retrieval works before writing any conversation logic:**
-   ```bash
-   python -m app.scripts.test_retrieval "ik wil coach worden, geen ervaring"
-   ```
-   You should see a ranked list of plausible course matches. If the top
-   results look wrong, fix the chunk text or embedding model before moving on —
-   don't let a weak retrieval layer become the conversation's problem later.
 
 ## What's deliberately NOT here yet
 

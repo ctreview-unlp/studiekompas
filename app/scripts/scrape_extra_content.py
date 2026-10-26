@@ -238,17 +238,11 @@ def main():
         print("\nReview the above carefully, then run with --ingest to add them.")
         return
 
-    from app.scripts.ingest_courses import DATABASE_URL, VOYAGE_API_KEY, EMBED_MODEL, build_chunk_text
+    from app.scripts.ingest_courses import DATABASE_URL
     import psycopg
-    import voyageai
-
-    vo = voyageai.Client(api_key=VOYAGE_API_KEY)
 
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
-            course_ids = []
-            chunk_texts = []
-
             for offer in found_offers:
                 offer["upcoming_schedule"] = (
                     f"aanmelden via: {offer['signup_link']}" if offer["signup_link"] else None
@@ -271,19 +265,8 @@ def main():
                     offer,
                 )
                 course_id = cur.fetchone()[0]
+                # Embeddings are no longer used; clear any left from older runs.
                 cur.execute("DELETE FROM course_chunks WHERE course_id = %s;", (course_id,))
-
-                course_ids.append(course_id)
-                chunk_texts.append(build_chunk_text(offer))
-
-            print(f"Embedding {len(chunk_texts)} offers in a single batch call...")
-            embeddings = vo.embed(chunk_texts, model=EMBED_MODEL, input_type="document").embeddings
-
-            for course_id, chunk_text, embedding in zip(course_ids, chunk_texts, embeddings):
-                cur.execute(
-                    "INSERT INTO course_chunks (course_id, chunk_text, embedding) VALUES (%s, %s, %s);",
-                    (course_id, chunk_text, embedding),
-                )
 
         conn.commit()
 

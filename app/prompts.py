@@ -2,9 +2,8 @@
 System prompt construction for the Studiekompas advisor.
 
 For now this pulls the full course list directly from Postgres (no vector
-search yet) — the catalog is small enough that a plain listing is enough
-context. Swap this for real retrieval (app/scripts/test_retrieval.py logic)
-once the catalog grows enough to need it.
+search) — the catalog is small enough that a plain listing is enough
+context. Add retrieval only once the catalog grows enough to need it.
 """
 
 import psycopg
