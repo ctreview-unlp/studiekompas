@@ -104,7 +104,8 @@ CONTACT_FALLBACK_REPLY = (
 chat_limiter = RateLimiter(max_requests=20, window_seconds=300)
 consent_limiter = RateLimiter(max_requests=10, window_seconds=300)
 
-app = FastAPI(title="Studiekompas API")
+# No public API docs: /docs, /redoc and /openapi.json would list every endpoint.
+app = FastAPI(title="Studiekompas API", docs_url=None, redoc_url=None, openapi_url=None)
 
 
 def trim_history(history: list[dict], max_messages: int) -> list[dict]:
