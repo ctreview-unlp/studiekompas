@@ -39,6 +39,7 @@ def configured() -> bool:
 
 
 def subject_for(lead: dict) -> str:
+    # Keep "Studiekompas" in the subject: a Trengo rule colours these tickets by it.
     want = "wil teruggebeld worden" if lead.get("contact_preference") == "telefoon" else "wil contact"
     return f"Studiekompas: {lead.get('name') or lead['email']} {want}"
 

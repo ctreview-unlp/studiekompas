@@ -44,6 +44,7 @@ def test_new_lead_opens_ticket_with_summary_and_transcript_link(fake_trengo):
     assert contact_path == "/api/v2/channels/123/contacts" and contact["identifier"] == "sanne@example.nl"
     assert ticket["contact_id"] == "555" and ticket["channel_id"] == 123
     assert "wil teruggebeld worden" in ticket["subject"]
+    assert ticket["subject"].startswith("Studiekompas:")  # Trengo colours tickets by this
     assert note_path == "/api/v2/tickets/999/messages" and note["internal_note"] is True
     assert SUMMARY["summary"] in note["message"]
     assert URL in note["message"]
