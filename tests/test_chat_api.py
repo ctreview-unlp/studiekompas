@@ -229,3 +229,25 @@ def test_lead_tool_call_ignored_while_capture_is_off(setup):
     post_chat(setup.client)
     assert setup.leads == []
     assert setup.calls[1]["messages"][-1]["content"][0]["is_error"] is True
+
+
+def test_lead_goes_to_trengo_when_configured(setup, monkeypatch):
+    monkeypatch.setattr(main, "LEAD_CAPTURE_ENABLED", True)
+    monkeypatch.setattr(main.trengo, "configured", lambda: True)
+    sent, stored = [], {}
+    monkeypatch.setattr(main.trengo, "send_lead",
+                        lambda lead, summary, url, existing_ticket_id=None: sent.append((lead, summary, url, existing_ticket_id)) or 999)
+    monkeypatch.setattr(main, "get_lead_ticket", lambda _db, lead_id: None)
+    monkeypatch.setattr(main, "set_lead_ticket", lambda _db, lead_id, ticket: stored.update({lead_id: ticket}))
+    setup.replies[:] = [
+        tool_response({"name": "Sanne", "email": "sanne@example.nl", "contact_preference": "email"}),
+        text_response("Dank je, ik heb je gegevens doorgegeven."),
+    ]
+    post_chat(setup.client)
+
+    lead, summary, url, existing = sent[0]
+    assert lead["email"] == "sanne@example.nl"
+    assert summary == {"summary": "Starter zoekt een opleiding."}
+    assert url.endswith("/admin/conversations/42") and existing is None
+    assert stored == {1: 999}
+    assert setup.emails == []  # Trengo replaces the email notification

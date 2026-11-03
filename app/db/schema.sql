@@ -94,4 +94,6 @@ CREATE TABLE IF NOT EXISTS leads (
 
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS contact_preference TEXT;
+-- The Trengo ticket opened for this lead (app/trengo.py), so later updates go to the same ticket.
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS trengo_ticket_id BIGINT;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS summary_updated_at TIMESTAMPTZ;

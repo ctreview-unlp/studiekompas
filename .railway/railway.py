@@ -11,7 +11,7 @@ def main(ctx=None):
         source=github("ctreview-unlp/studiekompas", branch="main", checkSuites=False),
         start="bash start.sh",
         replicas={ "europe-west4-drams3a": 1 },
-        env={ "ADMIN_PASSWORD": preserve(), "ANTHROPIC_API_KEY": preserve(), "APP_ENV": preserve(), "DATABASE_URL": preserve(), "VOYAGE_API_KEY": preserve() },
+        env={ "ADMIN_PASSWORD": preserve(), "ANTHROPIC_API_KEY": preserve(), "APP_ENV": preserve(), "DATABASE_URL": preserve() },
     )
     scraper = service(
         "studiekompas-scraper",
@@ -19,6 +19,6 @@ def main(ctx=None):
         start="bash start.sh",
         replicas={ "europe-west4-drams3a": 1 },
         deploy={ "cronSchedule": "0 3 * * *", "restartPolicyType": "NEVER" },
-        env={ "DATABASE_URL": preserve(), "SERVICE_ROLE": preserve(), "VOYAGE_API_KEY": preserve() },
+        env={ "DATABASE_URL": preserve(), "SERVICE_ROLE": preserve() },
     )
     return project("UNLP chatbot", variables={"managed": True}, resources=[studiekompas, scraper])

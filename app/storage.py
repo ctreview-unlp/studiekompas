@@ -121,6 +121,19 @@ def save_lead(database_url: str, session_id: str, lead: dict) -> int:
     return lead_id
 
 
+def get_lead_ticket(database_url: str, lead_id: int) -> int | None:
+    """The Trengo ticket already opened for this lead, if any."""
+    with psycopg.connect(database_url) as conn:
+        row = conn.execute("SELECT trengo_ticket_id FROM leads WHERE id = %s;", (lead_id,)).fetchone()
+        return row[0] if row else None
+
+
+def set_lead_ticket(database_url: str, lead_id: int, ticket_id: int) -> None:
+    with psycopg.connect(database_url) as conn:
+        conn.execute("UPDATE leads SET trengo_ticket_id = %s WHERE id = %s;", (ticket_id, lead_id))
+        conn.commit()
+
+
 def save_summary(database_url: str, session_id: str, summary: dict) -> None:
     """Store the advisor-facing summary fields generated for a conversation."""
     with psycopg.connect(database_url) as conn:

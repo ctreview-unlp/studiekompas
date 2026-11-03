@@ -41,12 +41,13 @@ from app.admin import router as admin_router
 from app.course_links import link_course_names
 from app.enrollment import enforce_enrollment_intent
 from app.leads import SAVE_LEAD_TOOL, InvalidLead, clean_lead
+from app import trengo
 from app.notify import send_lead_email
 from app.prompts import build_system_prompt, fetch_courses
 from app.rate_limit import RateLimiter, client_ip
 from app.storage import (
-    get_conversation, get_conversation_id, record_consent, save_lead, save_summary,
-    save_transcript,
+    get_conversation, get_conversation_id, get_lead_ticket, record_consent, save_lead,
+    save_summary, save_transcript, set_lead_ticket,
 )
 from app.summarize import summarize_conversation
 
@@ -61,9 +62,13 @@ PUBLIC_BASE_URL = os.environ.get(
     "PUBLIC_BASE_URL", "https://studiekompas-production.up.railway.app"
 ).rstrip("/")
 
-# Whether the advisor may collect contact details (save_lead). Off until the
-# team is notified of new leads; while off, it refers visitors to email.
-LEAD_CAPTURE_ENABLED = os.environ.get("LEAD_CAPTURE", "off").lower() in ("on", "true", "1")
+# Whether the advisor may collect contact details (save_lead). On only when
+# leads reach the team (Trengo configured), so details are never collected
+# without anyone being told; LEAD_CAPTURE=on/off overrides. While off, the
+# advisor refers visitors to email.
+LEAD_CAPTURE_ENABLED = os.environ.get(
+    "LEAD_CAPTURE", "on" if trengo.configured() else "off"
+).lower() in ("on", "true", "1")
 
 MODEL = "claude-sonnet-5-5"
 # "low" is the recommended starting point for chat on Claude Sonnet 5.5: the
@@ -206,9 +211,9 @@ def chat(req: ChatRequest, request: Request, background: BackgroundTasks):
         except InvalidLead as e:
             return {"type": "tool_result", "tool_use_id": block.id, "is_error": True,
                     "content": str(e)}
-        save_lead(DATABASE_URL, session_id, lead)
+        lead_id = save_lead(DATABASE_URL, session_id, lead)
         saved_lead.clear()
-        saved_lead.update(lead)
+        saved_lead.update(lead, id=lead_id)
         return {"type": "tool_result", "tool_use_id": block.id,
                 "content": "Gegevens opgeslagen en doorgegeven aan een opleidingsadviseur."}
 
@@ -284,8 +289,10 @@ def chat(req: ChatRequest, request: Request, background: BackgroundTasks):
 def after_reply(session_id: str, history: list[dict], course_names: list[str], lead: dict | None) -> None:
     """
     Runs after the response has been sent, so the visitor never waits on it.
-    Refreshes the advisor summary, then emails the advisors if a lead was
-    just saved. Failures are logged and never affect the conversation.
+    Refreshes the advisor summary, then, if a lead was just saved, passes it
+    to Student Support: as a Trengo ticket with the summary and a link to the
+    transcript, or by email when Trengo isn't configured. Failures are logged
+    and never affect the conversation.
     """
     summary = None
     try:
@@ -298,7 +305,12 @@ def after_reply(session_id: str, history: list[dict], course_names: list[str], l
         try:
             conversation_id = get_conversation_id(DATABASE_URL, session_id)
             url = f"{PUBLIC_BASE_URL}/admin/conversations/{conversation_id}" if conversation_id else None
-            send_lead_email(lead, summary, url)
+            if trengo.configured():
+                existing = get_lead_ticket(DATABASE_URL, lead["id"])
+                ticket_id = trengo.send_lead(lead, summary, url, existing_ticket_id=existing)
+                set_lead_ticket(DATABASE_URL, lead["id"], ticket_id)
+            else:
+                send_lead_email(lead, summary, url)
         except Exception:
             logger.exception("Lead notification failed for session %s", session_id)
 
