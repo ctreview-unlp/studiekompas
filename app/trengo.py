@@ -9,15 +9,21 @@ internal notes aren't sent to the customer). Replies from the team go to
 the visitor's own email address. If the visitor updates their details later
 in the same conversation, a note is added to the same ticket.
 
+Trengo assigns a ticket to whoever adds the first note, which is the token's
+user, so new tickets are handed to the team afterwards; that clears the user
+and later notes leave the assignment alone. Notes are plain text: Trengo
+strips HTML from them, so line breaks are newlines and the link a bare URL.
+
 API reference: https://developers.trengo.com (Bearer token, 120 req/min).
 
     TRENGO_API_TOKEN   API token of a dedicated Trengo user for Studiekompas, not
                        a staff member's personal token (Settings > Integrations > REST API)
     TRENGO_CHANNEL_ID  id of the info@unlp.nl email channel
+    TRENGO_TEAM_ID     team new tickets go to (UNLP Student Support); without
+                       it they stay assigned to the token's user
 """
 
 import os
-from html import escape
 
 import httpx
 
@@ -37,24 +43,27 @@ def subject_for(lead: dict) -> str:
     return f"Studiekompas: {lead.get('name') or lead['email']} {want}"
 
 
-def note_html(lead: dict, summary: dict | None, transcript_url: str | None, update: bool = False) -> str:
+def note_text(lead: dict, summary: dict | None, transcript_url: str | None, update: bool = False) -> str:
     """Contact details, the AI summary and a link to the full conversation."""
     contact = (
-        f"terugbellen op {escape(lead['phone'])}" if lead.get("contact_preference") == "telefoon"
+        f"terugbellen op {lead['phone']}" if lead.get("contact_preference") == "telefoon"
         else "via e-mail"
     )
     lines = [
-        "<b>Bijgewerkte gegevens van deze bezoeker</b>" if update
-        else "<b>Contactverzoek via het Studiekompas</b> (AI-studieadviseur op unlp.nl)",
-        f"Naam: {escape(lead.get('name') or '-')}",
-        f"E-mail: {escape(lead['email'])}",
+        "Bijgewerkte gegevens van deze bezoeker" if update
+        else "Contactverzoek via het Studiekompas (AI-studieadviseur op unlp.nl)",
+        "",
+        f"Naam: {lead.get('name') or '-'}",
+        f"E-mail: {lead['email']}",
         f"Contact: {contact}",
     ]
+    if lead.get("phone") and lead.get("contact_preference") != "telefoon":
+        lines.append(f"Telefoon: {lead['phone']}")
     if summary and summary.get("summary"):
-        lines += ["", "<b>AI-samenvatting</b>", escape(summary["summary"])]
+        lines += ["", "AI-samenvatting:", summary["summary"]]
     if transcript_url:
-        lines += ["", f'<a href="{escape(transcript_url)}">Volledig gesprek bekijken</a>']
-    return "<br>".join(lines)
+        lines += ["", f"Volledig gesprek: {transcript_url}"]
+    return "\n".join(lines)
 
 
 def send_lead(lead: dict, summary: dict | None, transcript_url: str | None,
@@ -71,7 +80,7 @@ def send_lead(lead: dict, summary: dict | None, transcript_url: str | None,
             resp = http.post(path, json=body)
             if resp.status_code >= 400:
                 raise TrengoError(f"POST {path} -> {resp.status_code}: {resp.text[:300]}")
-            return resp.json()
+            return resp.json() if resp.content else {}  # /assign answers with an empty body
 
         ticket_id = existing_ticket_id
         if ticket_id is None:
@@ -88,7 +97,10 @@ def send_lead(lead: dict, summary: dict | None, transcript_url: str | None,
             })
             ticket_id = int(ticket["id"])
         call(f"/tickets/{ticket_id}/messages", {
-            "message": note_html(lead, summary, transcript_url, update=existing_ticket_id is not None),
+            "message": note_text(lead, summary, transcript_url, update=existing_ticket_id is not None),
             "internal_note": True,
         })
+        team_id = os.environ.get("TRENGO_TEAM_ID")
+        if existing_ticket_id is None and team_id:
+            call(f"/tickets/{ticket_id}/assign", {"type": "team", "team_id": int(team_id)})
     return ticket_id

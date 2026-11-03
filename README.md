@@ -106,6 +106,7 @@ Environment variables (set in Railway):
 | `SMTP_FROM` | Sender address (defaults to `SMTP_USERNAME`) |
 | `LEAD_NOTIFY_TO` | Comma-separated advisor addresses that receive lead emails |
 | `TRENGO_API_TOKEN`, `TRENGO_CHANNEL_ID` | Contact requests become a Trengo ticket on the info@unlp.nl email channel, with the AI summary and a link to the transcript as an internal note (`app/trengo.py`). When both are set, lead capture switches on |
+| `TRENGO_TEAM_ID` | Trengo team new lead tickets are assigned to (UNLP Student Support: 48115); without it they stay assigned to the token's user |
 | `LEAD_CAPTURE` | `on`/`off` to override whether the advisor collects contact details (default: on when Trengo is configured) |
 | `PUBLIC_BASE_URL` | Base URL used for `/admin` links in emails (defaults to the Railway URL) |
 

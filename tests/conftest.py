@@ -8,3 +8,8 @@ import os
 
 os.environ["DATABASE_URL"] = "postgresql://test:test@localhost:1/test"
 os.environ["ANTHROPIC_API_KEY"] = "test-key"
+# Empty, so a Trengo token in a local .env never switches on lead capture
+# or reaches the real Trengo API (load_dotenv doesn't override set values).
+os.environ["TRENGO_API_TOKEN"] = ""
+os.environ["TRENGO_CHANNEL_ID"] = ""
+os.environ["TRENGO_TEAM_ID"] = ""

@@ -215,7 +215,7 @@ def chat(req: ChatRequest, request: Request, background: BackgroundTasks):
         saved_lead.clear()
         saved_lead.update(lead, id=lead_id)
         return {"type": "tool_result", "tool_use_id": block.id,
-                "content": "Gegevens opgeslagen en doorgegeven aan een opleidingsadviseur."}
+                "content": "Gegevens opgeslagen en doorgegeven aan een opleidingsadviseur, die binnen 1 à 2 werkdagen reageert."}
 
     messages = trim_history(history, MAX_HISTORY_MESSAGES)
     reply_parts = []

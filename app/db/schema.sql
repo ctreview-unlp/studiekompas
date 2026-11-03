@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS leads (
     objections      TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     retention_until DATE,           -- enforce GDPR retention window (Ch. 18 addendum)
-    phone           TEXT,           -- only asked for when the visitor wants to be called back
+    phone           TEXT,           -- optional; required when the visitor wants to be called back
     contact_preference TEXT         -- 'email' or 'telefoon'
 );
 

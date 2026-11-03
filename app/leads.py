@@ -25,7 +25,7 @@ SAVE_LEAD_TOOL = {
             "email": {"type": "string", "description": "E-mailadres zoals de bezoeker het gaf."},
             "phone": {
                 "type": "string",
-                "description": "Telefoonnummer, alleen als de bezoeker teruggebeld wil worden en het zelf gaf.",
+                "description": "Telefoonnummer, als de bezoeker het zelf gaf. Optioneel, behalve bij een terugbelverzoek.",
             },
             "contact_preference": {
                 "type": "string",
