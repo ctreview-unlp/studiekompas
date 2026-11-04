@@ -97,3 +97,5 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS contact_preference TEXT;
 -- The Trengo ticket opened for this lead (app/trengo.py), so later updates go to the same ticket.
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS trengo_ticket_id BIGINT;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS summary_updated_at TIMESTAMPTZ;
+-- What the visitor asked about, keys of TOPICS in app/summarize.py (part of the summary).
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS topics TEXT[];

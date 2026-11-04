@@ -26,6 +26,7 @@ can be shared via a live URL instead of only running locally.
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from uuid import UUID
 
 import anthropic
@@ -38,6 +39,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.admin import router as admin_router
+from app.stats import router as stats_router
 from app.course_links import link_course_names
 from app.enrollment import enforce_enrollment_intent
 from app.leads import SAVE_LEAD_TOOL, InvalidLead, clean_lead
@@ -46,8 +48,8 @@ from app.notify import send_lead_email
 from app.prompts import build_system_prompt, fetch_courses
 from app.rate_limit import RateLimiter, client_ip
 from app.storage import (
-    get_conversation, get_conversation_id, get_lead_ticket, record_consent, save_lead,
-    save_summary, save_transcript, set_lead_ticket,
+    apply_schema, get_conversation, get_conversation_id, get_lead_ticket, record_consent,
+    save_lead, save_summary, save_transcript, set_lead_ticket,
 )
 from app.summarize import summarize_conversation
 
@@ -110,7 +112,20 @@ chat_limiter = RateLimiter(max_requests=20, window_seconds=300)
 consent_limiter = RateLimiter(max_requests=10, window_seconds=300)
 
 # No public API docs: /docs, /redoc and /openapi.json would list every endpoint.
-app = FastAPI(title="Studiekompas API", docs_url=None, redoc_url=None, openapi_url=None)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Adds columns that new code needs (e.g. after a deploy); a failure is
+    # logged rather than keeping the chat offline.
+    try:
+        apply_schema(DATABASE_URL)
+    except Exception:
+        logger.exception("Applying the database schema failed")
+    yield
+
+
+app = FastAPI(title="Studiekompas API", docs_url=None, redoc_url=None, openapi_url=None,
+              lifespan=lifespan)
 
 
 def trim_history(history: list[dict], max_messages: int) -> list[dict]:
@@ -145,6 +160,7 @@ def database_error(request: Request, exc: psycopg.Error):
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 app.include_router(admin_router)
+app.include_router(stats_router)
 
 
 class ChatRequest(BaseModel):

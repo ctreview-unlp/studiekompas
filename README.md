@@ -47,6 +47,8 @@ Studiekompas/
    ```bash
    psql "$DATABASE_URL" -f app/db/schema.sql
    ```
+   The app also runs it on every start (it only adds what's missing), so new
+   columns exist after a deploy without doing this by hand.
 
 5. **Run the API locally and confirm it's alive:**
    ```bash
@@ -90,10 +92,17 @@ tech stack this scaffold is built against.
   for their name and email (plus phone for a callback) and stores them in
   `leads` via the `save_lead` tool (`app/leads.py`).
 - **Summaries:** after every reply, a background task writes a short summary,
-  recommended course, next step and persona guess onto the conversation
-  (`app/summarize.py`).
+  recommended course, next step, persona guess and topics (from the fixed
+  list `TOPICS`) onto the conversation (`app/summarize.py`).
 - **Advisor email:** a new lead triggers an email to the advisors (`app/notify.py`).
-- **Overview:** advisors log in at `/admin` to read conversations and leads, and log out with the "Log uit" button (`app/admin.py`).
+- **Overview:** advisors log in at `/admin` to read conversations and leads, and log out with the "Log uit" button (`app/admin.py`). Visitors who opened the chat but asked nothing are hidden unless you click "Toon deze".
+- **Statistics:** `/stats` shows usage per period and week, topics, recommended steps and courses: totals only, behind its own password, for people who shouldn't read conversations (`app/stats.py`).
+- **Topics for older conversations:** run inside the service (`railway ssh`), as the database is only reachable there:
+  ```bash
+  python -m app.scripts.label_topics --dry-run   # how many need labelling
+  python -m app.scripts.label_topics             # label them (one Claude call each)
+  python -m app.scripts.label_topics --discover  # suggest a better topic list from recent summaries
+  ```
 
 Environment variables (set in Railway):
 
@@ -102,6 +111,8 @@ Environment variables (set in Railway):
 | `ADMIN_PASSWORD` | Enables `/admin`; without it the page returns 404 |
 | `ADMIN_USERNAME` | Login name for `/admin` (default `unlp`) |
 | `ADMIN_SESSION_HOURS` | How long an `/admin` login stays valid (default 8); changing `ADMIN_PASSWORD` logs everyone out |
+| `STATS_PASSWORD` | Enables `/stats`; without it the page returns 404. Use a different password than `ADMIN_PASSWORD` |
+| `STATS_USERNAME` | Login name for `/stats` (default `unlp`) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | Mail server for lead emails (port defaults to 587, STARTTLS) |
 | `SMTP_FROM` | Sender address (defaults to `SMTP_USERNAME`) |
 | `LEAD_NOTIFY_TO` | Comma-separated advisor addresses that receive lead emails |

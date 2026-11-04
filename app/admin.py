@@ -31,6 +31,7 @@ from app.notify import STEP_LABELS
 from app.rate_limit import RateLimiter, client_ip
 from app.retention import conversation_months, lead_months
 from app.storage import get_conversation_detail, list_conversations
+from app.summarize import TOPICS
 
 router = APIRouter(prefix="/admin")
 
@@ -93,9 +94,11 @@ def fmt_time(value) -> str:
     return value.astimezone(LOCAL_TZ).strftime("%d-%m-%Y %H:%M") if value else "-"
 
 
-def page(title: str, body: str, logged_in: bool = True) -> HTMLResponse:
+def page(title: str, body: str, logged_in: bool = True, home: str = "/admin",
+         heading: str = "gesprekken") -> HTMLResponse:
+    """A page of /admin, or of another section (home) sharing its look, e.g. /stats."""
     logout_button = (
-        '<form method="post" action="/admin/logout"><button type="submit">Log uit</button></form>'
+        f'<form method="post" action="{home}/logout"><button type="submit">Log uit</button></form>'
         if logged_in else ""
     )
     html = f"""<!doctype html>
@@ -148,7 +151,7 @@ def page(title: str, body: str, logged_in: bool = True) -> HTMLResponse:
 </style>
 </head>
 <body>
-<header><a href="/admin">UNLP Studiekompas · gesprekken</a>{logout_button}</header>
+<header><a href="{home}">UNLP Studiekompas · {heading}</a>{logout_button}</header>
 <main>{body}</main>
 </body>
 </html>"""
@@ -156,9 +159,10 @@ def page(title: str, body: str, logged_in: bool = True) -> HTMLResponse:
     return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
-def login_page(next_url: str, error: str = "", status_code: int = 200) -> HTMLResponse:
+def login_page(next_url: str, error: str = "", status_code: int = 200, home: str = "/admin",
+               heading: str = "gesprekken") -> HTMLResponse:
     body = f"""
-<form class="login card" method="post" action="/admin/login">
+<form class="login card" method="post" action="{home}/login">
   <h1>Inloggen</h1>
   {f'<p class="error">{escape(error)}</p>' if error else ''}
   <input type="hidden" name="next" value="{escape(next_url)}">
@@ -168,7 +172,7 @@ def login_page(next_url: str, error: str = "", status_code: int = 200) -> HTMLRe
   <input id="password" name="password" type="password" autocomplete="current-password" required>
   <button type="submit">Inloggen</button>
 </form>"""
-    response = page("Inloggen · Studiekompas", body, logged_in=False)
+    response = page("Inloggen · Studiekompas", body, logged_in=False, home=home, heading=heading)
     response.status_code = status_code
     return response
 
@@ -213,8 +217,9 @@ def logout():
 
 
 @router.get("", response_class=HTMLResponse, dependencies=[Depends(require_advisor)])
-def overview(leads: bool = False, offset: int = Query(0, ge=0)):
-    rows = list_conversations(os.environ["DATABASE_URL"], only_leads=leads, limit=PAGE_SIZE + 1, offset=offset)
+def overview(leads: bool = False, empty: bool = False, offset: int = Query(0, ge=0)):
+    rows = list_conversations(os.environ["DATABASE_URL"], only_leads=leads, limit=PAGE_SIZE + 1,
+                              offset=offset, include_empty=empty)
     has_more = len(rows) > PAGE_SIZE
     rows = rows[:PAGE_SIZE]
 
@@ -224,7 +229,11 @@ def overview(leads: bool = False, offset: int = Query(0, ge=0)):
             f'<span class="tag">Aanvraag: {escape(r["lead_name"] or r["lead_email"] or "")}</span>'
             if r["lead_email"] else ""
         )
-        summary = escape(r["summary"]) if r["summary"] else '<span class="meta">Nog geen samenvatting</span>'
+        summary = (
+            escape(r["summary"]) if r["summary"]
+            else '<span class="meta">Geen vragen gesteld</span>' if not r["user_messages"]
+            else '<span class="meta">Nog geen samenvatting</span>'
+        )
         details = " · ".join(
             part for part in (
                 escape(r["recommended_course"]) if r["recommended_course"] else "",
@@ -238,20 +247,25 @@ def overview(leads: bool = False, offset: int = Query(0, ge=0)):
   {f'<div class="meta">{details}</div>' if details else ''}
 </a>""")
 
-    base = "/admin?leads=true" if leads else "/admin?"
-    sep = "&" if leads else ""
+    def link(**changes) -> str:
+        params = {"leads": leads, "empty": empty, "offset": offset, **changes}
+        query = "&".join(f"{k}={str(v).lower()}" for k, v in params.items() if v)
+        return "/admin" + (f"?{query}" if query else "")
+
     pager = []
     if offset > 0:
-        pager.append(f'<a href="{base}{sep}offset={max(offset - PAGE_SIZE, 0)}">← Nieuwer</a>')
+        pager.append(f'<a href="{link(offset=max(offset - PAGE_SIZE, 0))}">← Nieuwer</a>')
     if has_more:
-        pager.append(f'<a href="{base}{sep}offset={offset + PAGE_SIZE}">Ouder →</a>')
+        pager.append(f'<a href="{link(offset=offset + PAGE_SIZE)}">Ouder →</a>')
 
     body = f"""
 <h1>Gesprekken</h1>
 <p class="filters">
-  <a href="/admin" class="{'' if leads else 'active'}">Alle gesprekken</a>
-  <a href="/admin?leads=true" class="{'active' if leads else ''}">Alleen aanvragen</a>
+  <a href="{link(leads=False, offset=0)}" class="{'' if leads else 'active'}">Alle gesprekken</a>
+  <a href="{link(leads=True, offset=0)}" class="{'active' if leads else ''}">Alleen aanvragen</a>
 </p>
+<p class="meta">{'Inclusief' if empty else 'Zonder'} bezoekers die de chat openden maar niets vroegen.
+<a href="{link(empty=not empty, offset=0)}">{'Verberg' if empty else 'Toon'} deze</a></p>
 <p class="meta">Gesprekken worden na {conversation_months()} maanden automatisch verwijderd,
 aanvragen (met het bijbehorende gesprek) na {lead_months()} maanden.</p>
 {''.join(cards) or '<p class="meta">Geen gesprekken gevonden.</p>'}
@@ -300,6 +314,7 @@ def conversation(conversation_id: int):
   {row("Passende opleiding", c["recommended_course"])}
   {row("Vervolgstap", STEP_LABELS.get(c["recommended_step"]))}
   {row("Type bezoeker", c["persona_guess"])}
+  {row("Onderwerpen", ", ".join(TOPICS.get(t, t) for t in c.get("topics") or []))}
 </dl></div>
 {lead_html}
 <h2>Gesprek</h2>

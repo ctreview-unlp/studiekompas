@@ -3,9 +3,14 @@ Advisor-facing conversation summary.
 
 After each reply, a short structured summary is generated in the
 background and stored on the conversation (summary, recommended course,
-recommended next step, persona guess), so advisors can scan the overview
-instead of reading whole transcripts. It is regenerated every turn, so it
-always reflects the latest state of the conversation.
+recommended next step, persona guess, topics), so advisors can scan the
+overview instead of reading whole transcripts. It is regenerated every
+turn, so it always reflects the latest state of the conversation.
+
+The topics come from the fixed list in TOPICS, so they can be counted and
+compared over time on the statistics page (app/stats.py). Labels can be
+reworded freely; renaming or removing a key means relabelling existing
+conversations (python -m app.scripts.label_topics --all).
 
 The model returns the fields as JSON via structured outputs
 (output_config.format), which guarantees schema-valid output.
@@ -14,6 +19,22 @@ The model returns the fields as JSON via structured outputs
 import json
 
 RECOMMENDED_STEPS = ["enroll", "info_evening", "advice_call", "brochure", "human_handoff", "none"]
+
+# What visitors ask about. A first draft, to be refined with the team once
+# there's data (python -m app.scripts.label_topics --discover).
+TOPICS = {
+    "opleidingskeuze": "Welke opleiding past bij mij",
+    "inhoud": "Inhoud en opzet van een opleiding",
+    "niveau": "Instapniveau en vooropleiding",
+    "data_locatie": "Data, locaties en planning",
+    "tijdsinvestering": "Tijdsinvestering en combineren met werk",
+    "prijs": "Prijs, betaling en financiering",
+    "certificering": "Certificering en erkenning",
+    "loopbaan": "Beroep en loopbaan na de opleiding",
+    "inschrijven": "Inschrijven en praktische zaken",
+    "contact": "Contact met een adviseur",
+    "anders": "Anders",
+}
 
 SUMMARY_SCHEMA = {
     "type": "object",
@@ -39,8 +60,17 @@ SUMMARY_SCHEMA = {
             "type": "string",
             "description": "Korte typering, bijvoorbeeld 'oriënterende starter' of 'ervaren coach die zich wil verdiepen'.",
         },
+        "topics": {
+            "type": "array",
+            "items": {"type": "string", "enum": list(TOPICS)},
+            "description": (
+                "Waar de bezoeker naar vroeg, één tot drie onderwerpen, belangrijkste eerst: "
+                + "; ".join(f"{key} = {label}" for key, label in TOPICS.items())
+                + ". Gebruik 'anders' alleen als niets past."
+            ),
+        },
     },
-    "required": ["summary", "recommended_course", "recommended_step", "persona_guess"],
+    "required": ["summary", "recommended_course", "recommended_step", "persona_guess", "topics"],
     "additionalProperties": False,
 }
 
@@ -83,4 +113,5 @@ def summarize_conversation(claude, model: str, transcript: list[dict], course_na
         result["recommended_step"] = "none"
     if result.get("recommended_course") not in course_names:
         result["recommended_course"] = None
+    result["topics"] = list(dict.fromkeys(t for t in result.get("topics") or [] if t in TOPICS))[:3]
     return result

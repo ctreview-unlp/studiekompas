@@ -11,7 +11,7 @@ def main(ctx=None):
         source=github("ctreview-unlp/studiekompas", branch="main", checkSuites=False),
         start="bash start.sh",
         replicas={ "europe-west4-drams3a": 1 },
-        env={ "ADMIN_PASSWORD": preserve(), "ANTHROPIC_API_KEY": preserve(), "APP_ENV": preserve(), "DATABASE_URL": preserve(), "LEAD_CAPTURE": preserve(), "TRENGO_API_TOKEN": preserve(), "TRENGO_CHANNEL_ID": preserve(), "TRENGO_TEAM_ID": preserve() },
+        env={ "ADMIN_PASSWORD": preserve(), "ANTHROPIC_API_KEY": preserve(), "APP_ENV": preserve(), "DATABASE_URL": preserve(), "LEAD_CAPTURE": preserve(), "STATS_PASSWORD": preserve(), "TRENGO_API_TOKEN": preserve(), "TRENGO_CHANNEL_ID": preserve(), "TRENGO_TEAM_ID": preserve() },
     )
     scraper = service(
         "studiekompas-scraper",

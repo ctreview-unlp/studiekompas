@@ -64,6 +64,15 @@ def test_login_then_overview_with_escaped_content_and_logout(client):
     assert client.get("/admin").status_code == 303
 
 
+def test_overview_hides_conversations_without_questions(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(admin, "list_conversations", lambda *a, **k: calls.append(k["include_empty"]) or [ROW])
+    login(client)
+    assert "Toon deze" in client.get("/admin").text
+    assert "Verberg deze" in client.get("/admin?empty=true").text
+    assert calls == [False, True]
+
+
 def test_login_never_redirects_off_site(client):
     res = login(client, next_url="https://evil.example.com")
     assert res.headers["location"] == "/admin"
