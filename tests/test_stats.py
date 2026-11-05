@@ -98,3 +98,13 @@ def test_topic_report_resolves_topics_and_themes_and_trims_replies():
     text = condense([{"role": "user", "content": "Hoe word ik coach?"},
                      {"role": "assistant", "content": "x" * (MAX_REPLY_CHARS + 50)}])
     assert text.startswith("Bezoeker: Hoe word ik coach?\nStudiekompas: xxx") and text.endswith("[...]")
+
+
+def test_statistics_start_at_launch(client, monkeypatch):
+    from datetime import date
+    from app.storage import live_since
+    assert live_since() == date(2026, 10, 12)
+    login(client)
+    assert "Vanaf de livegang op 12-10-2026" in client.get("/stats").text
+    monkeypatch.setenv("STATS_LIVE_SINCE", "2026-11-01")
+    assert live_since() == date(2026, 11, 1)

@@ -114,6 +114,7 @@ Environment variables (set in Railway):
 | `ADMIN_SESSION_HOURS` | How long an `/admin` login stays valid (default 8); changing `ADMIN_PASSWORD` logs everyone out |
 | `STATS_PASSWORD` | Enables `/stats`; without it the page returns 404. Use a different password than `ADMIN_PASSWORD` |
 | `STATS_USERNAME` | Login name for `/stats` (default `unlp`) |
+| `STATS_LIVE_SINCE` | Launch date (YYYY-MM-DD, default 2026-10-12): statistics and reports ignore earlier (test) conversations; `/admin` still shows them |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | Mail server for lead emails (port defaults to 587, STARTTLS) |
 | `SMTP_FROM` | Sender address (defaults to `SMTP_USERNAME`) |
 | `LEAD_NOTIFY_TO` | Comma-separated advisor addresses that receive lead emails |

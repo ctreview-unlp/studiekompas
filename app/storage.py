@@ -7,6 +7,8 @@ turn. Consent is recorded separately, since it can happen before any
 message has been exchanged.
 """
 
+import os
+from datetime import date
 from pathlib import Path
 
 import psycopg
@@ -16,6 +18,19 @@ from psycopg.types.json import Json
 from app.retention import lead_months
 
 SCHEMA_PATH = Path(__file__).parent / "db" / "schema.sql"
+
+
+def live_since() -> date:
+    """
+    When the Studiekompas went live on the website (week of 12 October 2026).
+    Earlier conversations were tests, so statistics and reports start here;
+    /admin still shows them. STATS_LIVE_SINCE (YYYY-MM-DD) overrides it.
+    """
+    return date.fromisoformat(os.environ.get("STATS_LIVE_SINCE", "2026-10-12"))
+
+
+# Start of the launch day in Dutch time, for use in queries with params["live"].
+LIVE = "(%(live)s::timestamp AT TIME ZONE 'Europe/Amsterdam')"
 
 # A conversation in which the visitor asked at least one question. Opening the
 # chat and accepting the data-use notice already creates a row.
@@ -241,12 +256,13 @@ def get_conversation_detail(database_url: str, conversation_id: int) -> dict | N
 
 def usage_stats(database_url: str, days: int | None, topic_groups: dict[str, list[str]]) -> dict:
     """
-    Counts for conversations started in the last `days` days (all when None).
+    Counts for conversations started in the last `days` days (all when None),
+    never before the launch (live_since).
     Each group in topic_groups counts a conversation once, however many of
     the group's topics it has.
     """
-    since = "now() - make_interval(days => %(days)s)" if days else "'-infinity'::timestamptz"
-    params = {"days": days, **{f"g{i}": keys for i, keys in enumerate(topic_groups.values())}}
+    since = f"greatest(now() - make_interval(days => %(days)s), {LIVE})" if days else LIVE
+    params = {"days": days, "live": live_since(), **{f"g{i}": keys for i, keys in enumerate(topic_groups.values())}}
     with psycopg.connect(database_url) as conn:
         with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
             def rows(sql: str) -> list[dict]:
@@ -331,8 +347,8 @@ def recent_summaries(database_url: str, limit: int) -> list[str]:
     with psycopg.connect(database_url) as conn:
         return [r[0] for r in conn.execute(
             f"""SELECT c.summary FROM conversations c
-                WHERE c.summary IS NOT NULL AND {HAS_QUESTIONS}
-                ORDER BY c.started_at DESC LIMIT %s;""", (limit,)
+                WHERE c.summary IS NOT NULL AND {HAS_QUESTIONS} AND c.started_at >= {LIVE}
+                ORDER BY c.started_at DESC LIMIT %(limit)s;""", {"limit": limit, "live": live_since()}
         ).fetchall()]
 
 
@@ -343,6 +359,7 @@ def topic_transcripts(database_url: str, topics: list[str], days: int | None, li
         return [r[0] for r in conn.execute(
             f"""SELECT c.transcript FROM conversations c
                 WHERE c.consent_given AND c.topics && %(topics)s::text[] {since}
+                  AND c.started_at >= {LIVE}
                 ORDER BY c.started_at DESC LIMIT %(limit)s;""",
-            {"topics": topics, "days": days, "limit": limit},
+            {"topics": topics, "days": days, "limit": limit, "live": live_since()},
         ).fetchall()]

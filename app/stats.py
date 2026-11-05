@@ -29,7 +29,7 @@ from app.admin import fmt_time, is_local, make_session, page, session_hours, val
 from app.notify import STEP_LABELS
 from app.rate_limit import client_ip
 from app.retention import conversation_months
-from app.storage import usage_stats
+from app.storage import live_since, usage_stats
 from app.summarize import TOPIC_GROUPS, TOPICS
 
 router = APIRouter(prefix="/stats")
@@ -37,7 +37,7 @@ router = APIRouter(prefix="/stats")
 SESSION_COOKIE = "studiekompas_stats"
 HEADING = "statistieken"
 # Selectable periods: label and number of days (None = everything still stored).
-PERIODS = {"30": ("30 dagen", 30), "90": ("90 dagen", 90), "365": ("12 maanden", 365), "alles": ("Alles", None)}
+PERIODS = {"30": ("30 dagen", 30), "90": ("90 dagen", 90), "365": ("12 maanden", 365), "alles": ("Sinds livegang", None)}
 DEFAULT_PERIOD = "90"
 
 STYLE = """<style>
@@ -221,8 +221,9 @@ def overview(periode: str = DEFAULT_PERIOD):
     body = f"""{STYLE}
 <h1>Gebruik van het Studiekompas</h1>
 <p class="filters">{period_links}</p>
-<p class="meta">Gesprekken worden na {conversation_months()} maanden verwijderd, dus de cijfers gaan
-hooguit {conversation_months()} maanden terug. Alleen totalen: geen gesprekken of contactgegevens.</p>
+<p class="meta">Vanaf de livegang op {live_since().strftime("%d-%m-%Y")}; eerdere gesprekken waren tests.
+Gesprekken worden na {conversation_months()} maanden verwijderd, dus de cijfers gaan hooguit
+{conversation_months()} maanden terug. Alleen totalen: geen gesprekken of contactgegevens.</p>
 <div class="tiles">{tiles_html}</div>
 {section("Per week", "Donker: gesprekken met minstens één vraag. Licht: chat geopend.", weekly_rows(s["weekly"]))}
 {section("Onderwerpen", "Waar bezoekers naar vragen, per thema met de onderwerpen eronder. Een gesprek "
