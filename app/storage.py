@@ -239,10 +239,14 @@ def get_conversation_detail(database_url: str, conversation_id: int) -> dict | N
 # Usage statistics (app/stats.py): totals only, never conversation content
 # ---------------------------------------------------------------------
 
-def usage_stats(database_url: str, days: int | None) -> dict:
-    """Counts for conversations started in the last `days` days (all when None)."""
+def usage_stats(database_url: str, days: int | None, topic_groups: dict[str, list[str]]) -> dict:
+    """
+    Counts for conversations started in the last `days` days (all when None).
+    Each group in topic_groups counts a conversation once, however many of
+    the group's topics it has.
+    """
     since = "now() - make_interval(days => %(days)s)" if days else "'-infinity'::timestamptz"
-    params = {"days": days}
+    params = {"days": days, **{f"g{i}": keys for i, keys in enumerate(topic_groups.values())}}
     with psycopg.connect(database_url) as conn:
         with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
             def rows(sql: str) -> list[dict]:
@@ -281,6 +285,13 @@ def usage_stats(database_url: str, days: int | None) -> dict:
                 WHERE c.consent_given AND c.started_at >= {{since}} AND {HAS_QUESTIONS}
                 GROUP BY 1 ORDER BY 2 DESC;
             """)
+            group_counts = rows(f"""
+                SELECT {", ".join(f"count(*) FILTER (WHERE c.topics && %(g{i})s::text[]) AS g{i}"
+                                  for i in range(len(topic_groups))) or "1"}
+                FROM conversations c
+                WHERE c.consent_given AND c.started_at >= {{since}} AND {HAS_QUESTIONS};
+            """)[0]
+            groups = [{"group": name, "n": group_counts[f"g{i}"]} for i, name in enumerate(topic_groups)]
             steps = rows(f"""
                 SELECT c.recommended_step AS step, count(*) AS n
                 FROM conversations c
@@ -295,7 +306,8 @@ def usage_stats(database_url: str, days: int | None) -> dict:
                   AND coalesce(c.recommended_course, '') <> ''
                 GROUP BY 1 ORDER BY 2 DESC LIMIT 10;
             """)
-    return {"totals": totals, "weekly": weekly, "topics": topics, "steps": steps, "courses": courses}
+    return {"totals": totals, "weekly": weekly, "topics": topics, "groups": groups,
+            "steps": steps, "courses": courses}
 
 
 # ---------------------------------------------------------------------
@@ -321,4 +333,16 @@ def recent_summaries(database_url: str, limit: int) -> list[str]:
             f"""SELECT c.summary FROM conversations c
                 WHERE c.summary IS NOT NULL AND {HAS_QUESTIONS}
                 ORDER BY c.started_at DESC LIMIT %s;""", (limit,)
+        ).fetchall()]
+
+
+def topic_transcripts(database_url: str, topics: list[str], days: int | None, limit: int) -> list[list[dict]]:
+    """Transcripts of the most recent conversations with any of these topics (app/scripts/topic_report.py)."""
+    since = "AND c.started_at >= now() - make_interval(days => %(days)s)" if days else ""
+    with psycopg.connect(database_url) as conn:
+        return [r[0] for r in conn.execute(
+            f"""SELECT c.transcript FROM conversations c
+                WHERE c.consent_given AND c.topics && %(topics)s::text[] {since}
+                ORDER BY c.started_at DESC LIMIT %(limit)s;""",
+            {"topics": topics, "days": days, "limit": limit},
         ).fetchall()]

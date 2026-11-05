@@ -20,20 +20,34 @@ import json
 
 RECOMMENDED_STEPS = ["enroll", "info_evening", "advice_call", "brochure", "human_handoff", "none"]
 
-# What visitors ask about. A first draft, to be refined with the team once
-# there's data (python -m app.scripts.label_topics --discover).
+# What visitors ask about, based on --discover over the first ~200
+# conversations (python -m app.scripts.label_topics --discover).
 TOPICS = {
-    "opleidingskeuze": "Welke opleiding past bij mij",
-    "inhoud": "Inhoud en opzet van een opleiding",
-    "niveau": "Instapniveau en vooropleiding",
-    "data_locatie": "Data, locaties en planning",
-    "tijdsinvestering": "Tijdsinvestering en combineren met werk",
-    "prijs": "Prijs, betaling en financiering",
-    "certificering": "Certificering en erkenning",
-    "loopbaan": "Beroep en loopbaan na de opleiding",
-    "inschrijven": "Inschrijven en praktische zaken",
-    "contact": "Contact met een adviseur",
+    "coach_worden": "Coach of trainer worden",
+    "nlp_variant": "NLP Practitioner en Master: variant en niveau",
+    "persoonlijk": "Persoonlijke hulpvraag en ontwikkeling",
+    "kennismaken": "Gratis kennismaken (introductiedag, informatieavond, webinar)",
+    "verdieping": "Verdieping en specialisatie na een eerdere opleiding",
+    "buiten_aanbod": "Vraag buiten het aanbod van UNLP",
+    "data_locatie": "Data, locatie, planning en duur",
+    "prijs": "Prijs en financiering",
+    "certificering": "Certificering, erkenning en toelating",
+    "trainers": "Trainers en organisatie",
+    "contact": "Mens spreken of terugbellen",
+    "inschrijven": "Inschrijven",
+    "onduidelijk": "Onduidelijk of afgehaakt",
     "anders": "Anders",
+}
+
+# Broad themes for the statistics page, so it opens with a handful of bars
+# with the detail underneath. Only affects how topics are shown: regrouping
+# needs no relabelling. Every topic belongs to exactly one theme.
+TOPIC_GROUPS = {
+    "Opleiding kiezen": ["coach_worden", "nlp_variant", "verdieping", "kennismaken"],
+    "Persoonlijke hulpvraag": ["persoonlijk"],
+    "Praktische vragen": ["data_locatie", "prijs", "certificering", "trainers"],
+    "Contact en inschrijven": ["contact", "inschrijven"],
+    "Overig": ["buiten_aanbod", "onduidelijk", "anders"],
 }
 
 SUMMARY_SCHEMA = {

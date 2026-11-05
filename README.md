@@ -102,6 +102,7 @@ tech stack this scaffold is built against.
   python -m app.scripts.label_topics --dry-run   # how many need labelling
   python -m app.scripts.label_topics             # label them (one Claude call each)
   python -m app.scripts.label_topics --discover  # suggest a better topic list from recent summaries
+  python -m app.scripts.topic_report coach_worden # what exactly visitors ask about one topic or theme (--list)
   ```
 
 Environment variables (set in Railway):

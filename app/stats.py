@@ -9,7 +9,8 @@ conversations in /admin. Shares the look and login mechanism of /admin.
     STATS_USERNAME   (default "unlp")
     STATS_PASSWORD   required to enable /stats
 
-Topics come from the conversation summaries (TOPICS in app/summarize.py);
+Topics come from the conversation summaries (TOPICS in app/summarize.py)
+and are shown grouped into broad themes (TOPIC_GROUPS), detail underneath;
 conversations from before topics existed are labelled with
 `python -m app.scripts.label_topics`.
 """
@@ -29,7 +30,7 @@ from app.notify import STEP_LABELS
 from app.rate_limit import client_ip
 from app.retention import conversation_months
 from app.storage import usage_stats
-from app.summarize import TOPICS
+from app.summarize import TOPIC_GROUPS, TOPICS
 
 router = APIRouter(prefix="/stats")
 
@@ -50,6 +51,9 @@ STYLE = """<style>
   .track .bar { position:absolute; top:0; left:0; }
   .track .bar.light { position:static; }
   .num { color:var(--soft); font-size:13px; text-align:right; white-space:nowrap; }
+  .theme { font-weight:600; margin-top:8px; }
+  .sub { padding-left:16px; color:var(--soft); font-size:14px; }
+  .bar.gold { background:var(--gold); height:10px; }
   /* Narrow screens: label on its own line, bar and number below it. */
   @media (max-width:600px) {
     .bars { grid-template-columns:1fr max-content; gap:2px 10px; }
@@ -131,6 +135,28 @@ def bar_rows(items: list[tuple[str, int]], total: int) -> str:
     )
 
 
+def theme_rows(groups: list[dict], topics: list[dict], total: int) -> str:
+    """Each theme (largest first) with its topics below it, bars on one scale."""
+    per_topic = {r["topic"]: r["n"] for r in topics}
+    top = max((g["n"] for g in groups), default=0) or 1
+    out = []
+    for g in sorted(groups, key=lambda g: -g["n"]):
+        out.append(
+            f'<div class="theme">{escape(g["group"])}</div>'
+            f'<div><div class="bar" style="width:{100 * g["n"] / top:.1f}%"></div></div>'
+            f'<div class="num">{g["n"]} · {pct(g["n"], total)}</div>'
+        )
+        for key in sorted(TOPIC_GROUPS[g["group"]], key=lambda k: -per_topic.get(k, 0)):
+            n = per_topic.get(key, 0)
+            if n:
+                out.append(
+                    f'<div class="sub">{escape(TOPICS.get(key, key))}</div>'
+                    f'<div><div class="bar gold" style="width:{100 * n / top:.1f}%"></div></div>'
+                    f'<div class="num">{n} · {pct(n, total)}</div>'
+                )
+    return "".join(out) if any(g["n"] for g in groups) else ""
+
+
 def weekly_rows(weekly: list[dict]) -> str:
     """One row per week, gaps filled, newest first: conversations on top of chats opened."""
     if not weekly:
@@ -157,7 +183,7 @@ def overview(periode: str = DEFAULT_PERIOD):
     if periode not in PERIODS:
         periode = DEFAULT_PERIOD
     label, days = PERIODS[periode]
-    s = usage_stats(os.environ["DATABASE_URL"], days)
+    s = usage_stats(os.environ["DATABASE_URL"], days, TOPIC_GROUPS)
     t = s["totals"]
     conversations = t["conversations"]
 
@@ -179,9 +205,9 @@ def overview(periode: str = DEFAULT_PERIOD):
         for name, value, note in tiles
     )
 
-    topics = [(TOPICS.get(r["topic"], r["topic"]), r["n"]) for r in s["topics"]]
     unlabelled = (
-        f'<p class="meta">{t["unlabelled"]} gesprekken hebben nog geen onderwerp.</p>'
+        f'<p class="meta">{t["unlabelled"]} {"gesprek heeft" if t["unlabelled"] == 1 else "gesprekken hebben"}'
+        ' nog geen onderwerp.</p>'
         if t["unlabelled"] else ""
     )
     steps = [(STEP_LABELS.get(r["step"], r["step"]), r["n"]) for r in s["steps"]]
@@ -199,8 +225,9 @@ def overview(periode: str = DEFAULT_PERIOD):
 hooguit {conversation_months()} maanden terug. Alleen totalen: geen gesprekken of contactgegevens.</p>
 <div class="tiles">{tiles_html}</div>
 {section("Per week", "Donker: gesprekken met minstens één vraag. Licht: chat geopend.", weekly_rows(s["weekly"]))}
-{section("Onderwerpen", "Waar bezoekers naar vragen. Een gesprek kan meerdere onderwerpen hebben; "
-         "het percentage is het deel van de gesprekken.", bar_rows(topics, conversations))}
+{section("Onderwerpen", "Waar bezoekers naar vragen, per thema met de onderwerpen eronder. Een gesprek "
+         "telt één keer per thema, maar kan onder meerdere thema's vallen; het percentage is het deel "
+         "van de gesprekken.", theme_rows(s["groups"], s["topics"], conversations))}
 {unlabelled}
 {section("Aanbevolen vervolgstap", "Wat het Studiekompas als logische volgende stap zag.",
          bar_rows(steps, conversations))}

@@ -17,6 +17,7 @@ STATS = {
     "weekly": [{"week": date(2026, 10, 19), "conversations": 1, "opened": 2},
                {"week": date(2026, 11, 2), "conversations": 7, "opened": 10}],
     "topics": [{"topic": "prijs", "n": 4}, {"topic": "data_locatie", "n": 2}],
+    "groups": [{"group": "Praktische vragen", "n": 5}, {"group": "Opleiding kiezen", "n": 0}],
     "steps": [{"step": "advice_call", "n": 3}],
     "courses": [{"course": "<b>NLP Practitioner</b>", "n": 5}],
 }
@@ -27,7 +28,7 @@ def client(monkeypatch):
     monkeypatch.setenv("STATS_PASSWORD", "cijfers")
     monkeypatch.setenv("ADMIN_PASSWORD", "geheim")
     periods = []
-    monkeypatch.setattr(stats, "usage_stats", lambda _db, days: periods.append(days) or STATS)
+    monkeypatch.setattr(stats, "usage_stats", lambda _db, days, groups: periods.append(days) or STATS)
     monkeypatch.setattr(admin, "login_limiter", RateLimiter(max_requests=100, window_seconds=60))
     client = TestClient(main.app, base_url="https://testserver", follow_redirects=False)
     client.periods = periods
@@ -56,7 +57,8 @@ def test_stats_page_shows_totals_topics_and_weeks(client):
     assert res.status_code == 200 and res.headers["cache-control"] == "no-store"
     assert client.periods == [90]  # default period
     text = res.text
-    assert "Prijs, betaling en financiering" in text and "4 · 50%" in text
+    assert "Praktische vragen" in text and "5 · 62%" in text  # theme, counted once per conversation
+    assert "Prijs en financiering" in text and "4 · 50%" in text  # its topics underneath
     assert "Adviesgesprek" in text and "mediaan 2,5 per gesprek" in text
     assert "3 gesprekken hebben nog geen onderwerp" in text
     assert "1 gesprek · 2 geopend" in text and "week van 26-10-2026" in text  # empty week filled in
@@ -73,8 +75,26 @@ def test_stats_period_choice(client):
 def test_summary_keeps_only_known_topics():
     reply = SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=(
         '{"summary": "s", "recommended_course": "", "recommended_step": "none", "persona_guess": "p",'
-        ' "topics": ["prijs", "verzonnen", "prijs", "inhoud", "niveau", "loopbaan"]}'
+        ' "topics": ["prijs", "verzonnen", "prijs", "coach_worden", "trainers", "inschrijven"]}'
     ))])
     claude = SimpleNamespace(messages=SimpleNamespace(create=lambda **kw: reply))
     result = summarize_conversation(claude, "model", [{"role": "user", "content": "hoi"}], [])
-    assert result["topics"] == ["prijs", "inhoud", "niveau"]
+    assert result["topics"] == ["prijs", "coach_worden", "trainers"]
+
+
+def test_every_topic_in_exactly_one_theme():
+    from app.summarize import TOPIC_GROUPS, TOPICS
+    grouped = [key for keys in TOPIC_GROUPS.values() for key in keys]
+    assert sorted(grouped) == sorted(TOPICS)
+
+
+def test_topic_report_resolves_topics_and_themes_and_trims_replies():
+    from app.scripts.topic_report import MAX_REPLY_CHARS, condense, resolve
+    assert resolve("coach_worden")[1] == ["coach_worden"]
+    assert resolve("Coach of trainer worden")[1] == ["coach_worden"]
+    assert resolve("Praktische vragen")[1] == ["data_locatie", "prijs", "certificering", "trainers"]
+    with pytest.raises(SystemExit):
+        resolve("onbekend")
+    text = condense([{"role": "user", "content": "Hoe word ik coach?"},
+                     {"role": "assistant", "content": "x" * (MAX_REPLY_CHARS + 50)}])
+    assert text.startswith("Bezoeker: Hoe word ik coach?\nStudiekompas: xxx") and text.endswith("[...]")
