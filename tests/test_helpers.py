@@ -145,3 +145,14 @@ def test_prompt_includes_background_about_unlp():
     prompt = build_system_prompt([])
     assert "## Over UNLP" in prompt
     assert "Vincent van der Burg" in prompt and "Marcel Meijlink" in prompt
+
+
+def test_whatsapp_offered_next_to_email():
+    import app.main as main
+    from app.prompts import WHATSAPP_BUTTON, build_system_prompt
+    assert WHATSAPP_BUTTON.startswith("[Stuur ons een WhatsApp](https://wa.me/31202615383?text=")
+    for lead_capture in (False, True):
+        prompt = build_system_prompt([], lead_capture=lead_capture)
+        assert WHATSAPP_BUTTON in prompt and "mailto:info@unlp.nl" in prompt
+    for reply in (main.REFUSAL_REPLY, main.CONTACT_FALLBACK_REPLY):
+        assert reply.endswith("\n" + WHATSAPP_BUTTON)  # a button on its own line

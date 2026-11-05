@@ -12,6 +12,15 @@ from app.about_unlp import ABOUT_UNLP
 from app.course_data import format_price, summarize_prices
 
 
+# Contact buttons. WhatsApp messages to this number arrive in Trengo, like
+# email to info@unlp.nl; the text is pre-filled so the team sees where the
+# visitor came from.
+EMAIL_BUTTON = "[Neem contact op via e-mail](mailto:info@unlp.nl)"
+WHATSAPP_BUTTON = (
+    "[Stuur ons een WhatsApp](https://wa.me/31202615383?text="
+    "Hallo%20UNLP%2C%20ik%20kom%20via%20het%20Studiekompas%20op%20jullie%20website.)"
+)
+
 # The scraper runs nightly; a course missing from the last 36 hours of runs
 # (two missed nights) is no longer offered by the advisor.
 FRESHNESS_HOURS = 36
@@ -96,8 +105,9 @@ voorbereid is.
 Zeg pas dat de gegevens zijn doorgegeven als save_lead is gelukt. Geeft de tool
 een fout, vraag de bezoeker dan het betreffende gegeven te controleren. Laat na
 het doorgeven weten dat een opleidingsadviseur binnen 1 à 2 werkdagen reageert. Wil
-iemand liever zelf contact opnemen, bied dan de e-mailknop aan.
-"""
+iemand liever zelf contact opnemen, bied dan de knoppen voor e-mail en WhatsApp
+aan, elk op een eigen regel:
+""" + EMAIL_BUTTON + "\n" + WHATSAPP_BUTTON + "\n"
 
 # Used while lead capture is off: nothing reaches the team through the chat,
 # so the advisor must not collect details or promise that anyone will call.
@@ -105,12 +115,13 @@ CONTACT_EMAIL_ONLY = """## Contact met een opleidingsadviseur
 Via deze chat wordt niets naar het team gestuurd: je kunt geen gegevens
 doorgeven, geen terugbelverzoek indienen en geen afspraak inplannen. Wil een
 bezoeker contact met een mens, teruggebeld worden, een adviesgesprek, of dat
-iemand iets voor diegene uitzoekt, verwijs dan naar e-mail met de knop
-[Neem contact op via e-mail](mailto:info@unlp.nl).
+iemand iets voor diegene uitzoekt, verwijs dan naar e-mail of WhatsApp met deze
+knoppen, elk op een eigen regel:
+""" + EMAIL_BUTTON + "\n" + WHATSAPP_BUTTON + """
 
 Waar in deze instructies staat dat je aanbiedt dat een adviseur iets uitzoekt
 of meedenkt, betekent dat dus: de bezoeker kan daarvoor mailen naar
-info@unlp.nl. Vraag niet om naam, e-mailadres of telefoonnummer, en zeg nooit
+info@unlp.nl of een WhatsApp sturen. Vraag niet om naam, e-mailadres of telefoonnummer, en zeg nooit
 dat iets is doorgegeven of genoteerd, of dat iemand contact opneemt, want dat
 gebeurt niet.
 """
@@ -241,7 +252,7 @@ een knop alleen als die stap op dat moment in het gesprek relevant is.
 
 Een vervolgstap die met één klik kan, toon je als knop op een eigen regel, in
 het formaat [knoptekst](link). Zet nooit een losse URL in de tekst. Voor
-e-mailcontact gebruik je [Neem contact op via e-mail](mailto:info@unlp.nl).
+contact gebruik je {EMAIL_BUTTON} en {WHATSAPP_BUTTON}.
 
 Noem opleidingen bij hun exacte naam uit de brongegevens. Die namen worden
 automatisch klikbaar naar de informatiepagina, dus voeg zelf geen knop of link

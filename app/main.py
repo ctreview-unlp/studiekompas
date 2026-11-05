@@ -45,7 +45,7 @@ from app.enrollment import enforce_enrollment_intent
 from app.leads import SAVE_LEAD_TOOL, InvalidLead, clean_lead
 from app import trengo
 from app.notify import send_lead_email
-from app.prompts import build_system_prompt, fetch_courses
+from app.prompts import WHATSAPP_BUTTON, build_system_prompt, fetch_courses
 from app.rate_limit import RateLimiter, client_ip
 from app.storage import (
     apply_schema, get_conversation, get_conversation_id, get_lead_ticket, record_consent,
@@ -98,14 +98,14 @@ MAX_TOOL_ROUNDS = 3
 # Shown when the model declines to answer (stop_reason "refusal").
 REFUSAL_REPLY = (
     "Daar kan ik je helaas niet mee helpen. Heb je een vraag over een opleiding, "
-    "dan denk ik graag met je mee, of neem contact op met een opleidingsadviseur. "
-    "[Mail een adviseur](mailto:info@unlp.nl)"
+    "dan denk ik graag met je mee, of neem contact op met een opleidingsadviseur.\n"
+    "[Mail een adviseur](mailto:info@unlp.nl)\n" + WHATSAPP_BUTTON
 )
 
 CONTACT_FALLBACK_REPLY = (
     "We hebben al een flink gesprek gevoerd. Om je verder goed te helpen, kun je "
-    "het beste contact opnemen met een opleidingsadviseur van UNLP. "
-    "[Mail een adviseur](mailto:info@unlp.nl)"
+    "het beste contact opnemen met een opleidingsadviseur van UNLP.\n"
+    "[Mail een adviseur](mailto:info@unlp.nl)\n" + WHATSAPP_BUTTON
 )
 
 chat_limiter = RateLimiter(max_requests=20, window_seconds=300)

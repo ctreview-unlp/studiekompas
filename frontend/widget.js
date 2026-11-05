@@ -28,6 +28,7 @@
  * which become real styled CTA buttons:
  *   - https:// or http:// targets  -> open in a new tab (info pages, etc.)
  *   - mailto: targets              -> open the visitor's mail client
+ *   - https://wa.me/ targets       -> WhatsApp to UNLP (arrives in Trengo)
  *   - action:xxx targets           -> trigger an in-chat action (e.g. a
  *                                      callback request) instead of navigating
  * This is the one "markdown" the model is allowed to use, so raw URLs are
@@ -482,7 +483,9 @@
   }
 
   const ERROR_MESSAGE =
-    "Er ging iets mis bij het verbinden met de adviseur. Probeer het over even nog eens, of mail ons direct. [Mail UNLP](mailto:info@unlp.nl)";
+    "Er ging iets mis bij het verbinden met de adviseur. Probeer het over even nog eens, of neem direct contact met ons op.\n" +
+    "[Mail UNLP](mailto:info@unlp.nl)\n" +
+    "[Stuur ons een WhatsApp](https://wa.me/31202615383?text=Hallo%20UNLP%2C%20ik%20kom%20via%20het%20Studiekompas%20op%20jullie%20website.)";
   const RATE_LIMIT_MESSAGE =
     "Je stuurt veel berichten kort achter elkaar. Wacht even een paar minuten en probeer het dan opnieuw.";
 
