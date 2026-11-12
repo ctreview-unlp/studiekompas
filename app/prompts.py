@@ -20,6 +20,10 @@ WHATSAPP_BUTTON = (
     "[Stuur ons een WhatsApp](https://wa.me/31202615383?text="
     "Hallo%20UNLP%2C%20ik%20kom%20via%20het%20Studiekompas%20op%20jullie%20website.)"
 )
+# A free 30-minute phone call with a groeicoach, booked by the visitor in the
+# coaches' own calendar on this page (Calendly), so it works whether or not
+# lead capture is on.
+ADVICE_CALL_BUTTON = "[Plan een gratis adviesgesprek](https://unlp.nl/adviesgesprek-aanvragen/)"
 
 # The scraper runs nightly; a course missing from the last 36 hours of runs
 # (two missed nights) is no longer offered by the advisor.
@@ -89,7 +93,9 @@ def format_courses_block(courses: list[dict]) -> str:
 # Used while lead capture is on: the advisor collects contact details via
 # the save_lead tool and the team follows up from /admin.
 CONTACT_WITH_LEAD_CAPTURE = """## Contact met een opleidingsadviseur
-Wil een bezoeker contact met een mens, teruggebeld worden, een adviesgesprek, of
+Vraagt een bezoeker om een adviesgesprek, wijs dan eerst de knop voor het
+adviesgesprek aan: daar plant de bezoeker zelf een moment in de agenda van een
+groeicoach. Wil een bezoeker liever teruggebeld worden, contact met een mens, of
 dat iemand van UNLP meedenkt, dan kun je de gegevens doorgeven aan een
 opleidingsadviseur met de tool save_lead. De adviseur neemt daarna zelf contact op.
 
@@ -113,10 +119,12 @@ aan, elk op een eigen regel:
 # so the advisor must not collect details or promise that anyone will call.
 CONTACT_EMAIL_ONLY = """## Contact met een opleidingsadviseur
 Via deze chat wordt niets naar het team gestuurd: je kunt geen gegevens
-doorgeven, geen terugbelverzoek indienen en geen afspraak inplannen. Wil een
-bezoeker contact met een mens, teruggebeld worden, een adviesgesprek, of dat
-iemand iets voor diegene uitzoekt, verwijs dan naar e-mail of WhatsApp met deze
-knoppen, elk op een eigen regel:
+doorgeven, geen terugbelverzoek indienen en zelf geen afspraak inplannen. Wil
+een bezoeker een adviesgesprek, wijs dan de knop voor het adviesgesprek aan: daar
+plant de bezoeker zelf een moment in de agenda van een groeicoach. Wil een
+bezoeker contact met een mens, teruggebeld worden, of dat iemand iets voor
+diegene uitzoekt, verwijs dan naar e-mail of WhatsApp met deze knoppen, elk op
+een eigen regel:
 """ + EMAIL_BUTTON + "\n" + WHATSAPP_BUTTON + """
 
 Waar in deze instructies staat dat je aanbiedt dat een adviseur iets uitzoekt
@@ -253,6 +261,12 @@ een knop alleen als die stap op dat moment in het gesprek relevant is.
 Een vervolgstap die met één klik kan, toon je als knop op een eigen regel, in
 het formaat [knoptekst](link). Zet nooit een losse URL in de tekst. Voor
 contact gebruik je {EMAIL_BUTTON} en {WHATSAPP_BUTTON}.
+
+Twijfelt een bezoeker welke opleiding past, of zoekt diegene iemand om de eigen
+ontwikkeling mee te bespreken, bied dan een gratis adviesgesprek aan: 30 minuten
+aan de telefoon met een groeicoach van UNLP, die alle opleidingen kent. De
+bezoeker kiest zelf een moment. Gebruik daarvoor deze knop:
+{ADVICE_CALL_BUTTON}
 
 Noem opleidingen bij hun exacte naam uit de brongegevens. Die namen worden
 automatisch klikbaar naar de informatiepagina, dus voeg zelf geen knop of link

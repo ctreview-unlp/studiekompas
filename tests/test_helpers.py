@@ -156,3 +156,12 @@ def test_whatsapp_offered_next_to_email():
         assert WHATSAPP_BUTTON in prompt and "mailto:info@unlp.nl" in prompt
     for reply in (main.REFUSAL_REPLY, main.CONTACT_FALLBACK_REPLY):
         assert reply.endswith("\n" + WHATSAPP_BUTTON)  # a button on its own line
+
+
+def test_advice_call_can_be_booked():
+    from app.prompts import ADVICE_CALL_BUTTON, build_system_prompt
+    assert ADVICE_CALL_BUTTON == "[Plan een gratis adviesgesprek](https://unlp.nl/adviesgesprek-aanvragen/)"
+    for lead_capture in (False, True):
+        prompt = build_system_prompt([], lead_capture=lead_capture)
+        assert "\n" + ADVICE_CALL_BUTTON + "\n" in prompt  # a button on its own line
+        assert "zelf een moment in de agenda van een groeicoach" in " ".join(prompt.split())
