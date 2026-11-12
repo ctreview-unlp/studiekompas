@@ -223,6 +223,9 @@
         line-height: 1.6;
         margin: 0;
       }
+      .consent-gate a {
+        color: var(--sk-navy);
+      }
       .consent-gate button {
         background: var(--sk-navy);
         color: #FAF7F2;
@@ -434,9 +437,13 @@
 
       <div class="consent-gate" id="consent-gate">
         <p>
-          Voordat we starten: dit gesprek wordt opgeslagen zodat een UNLP-opleidingsadviseur
-          je goed kan helpen. We gebruiken je gegevens alleen hiervoor en bewaren ze niet
-          langer dan nodig. Ga je hiermee akkoord?
+          Voordat we starten: je praat met een AI-studieadviseur. We slaan het gesprek op
+          zodat een opleidingsadviseur je goed kan helpen, en gebruiken het zonder je naam om
+          onze opleidingsinformatie te verbeteren. Laat je je gegevens achter, dan neemt
+          Student Support contact met je op. Gesprekken bewaren we maximaal 6 maanden, of 12
+          als je contact met ons wilt.
+          <a href="https://unlp.nl/privacyverklaring/" target="_blank" rel="noopener">Privacyverklaring</a>.
+          Ga je hiermee akkoord?
         </p>
         <button id="consent-accept" type="button">Ja, ik ga akkoord</button>
       </div>
