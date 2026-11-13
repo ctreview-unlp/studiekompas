@@ -151,6 +151,22 @@ def save_lead(database_url: str, session_id: str, lead: dict) -> int:
     return lead_id
 
 
+def get_lead(database_url: str, session_id: str) -> dict | None:
+    """The contact details already passed on in this conversation, if any."""
+    with psycopg.connect(database_url) as conn:
+        row = conn.execute(
+            """
+            SELECT l.name, l.email, l.phone, l.contact_preference
+            FROM leads l JOIN conversations c ON c.id = l.conversation_id
+            WHERE c.session_id = %s;
+            """,
+            (session_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return dict(zip(("name", "email", "phone", "contact_preference"), row))
+
+
 def get_lead_ticket(database_url: str, lead_id: int) -> int | None:
     """The Trengo ticket already opened for this lead, if any."""
     with psycopg.connect(database_url) as conn:

@@ -21,6 +21,7 @@ class FakeDB:
         self.transcript = transcript or []
         self.consent = consent
         self.saved = None
+        self.lead = None
 
     def get_conversation(self, _db, _session_id):
         return list(self.transcript), self.consent
@@ -59,6 +60,7 @@ def setup(monkeypatch):
 
     monkeypatch.setattr(main, "get_conversation", db.get_conversation)
     monkeypatch.setattr(main, "save_transcript", db.save_transcript)
+    monkeypatch.setattr(main, "get_lead", lambda _db, _sid: db.lead)
     monkeypatch.setattr(main, "fetch_courses", lambda _db: COURSES)
     monkeypatch.setattr(main.claude.beta.messages, "create", fake_create)
     monkeypatch.setattr(main, "chat_limiter", RateLimiter(max_requests=100, window_seconds=60))
@@ -251,3 +253,19 @@ def test_lead_goes_to_trengo_when_configured(setup, monkeypatch):
     assert url.endswith("/admin/conversations/42") and existing is None
     assert stored == {1: 999}
     assert setup.emails == []  # Trengo replaces the email notification
+
+
+def test_advisor_told_when_details_were_already_passed_on(setup, monkeypatch):
+    # The transcript drops the save_lead call, so on later turns the model
+    # must be told it already happened, or it "corrects" itself and saves again.
+    monkeypatch.setattr(main, "LEAD_CAPTURE_ENABLED", True)
+    post_chat(setup.client)
+    assert len(setup.calls[0]["system"]) == 1
+
+    setup.db.lead = {"name": "Sanne", "email": "sanne@example.nl", "phone": None,
+                     "contact_preference": "email"}
+    post_chat(setup.client, message="Ja, dat is goed.")
+    cached, context = setup.calls[1]["system"]
+    assert "cache_control" in cached and "cache_control" not in context
+    assert "al met save_lead doorgegeven" in context["text"]
+    assert "sanne@example.nl" in context["text"] and "telefoon" not in context["text"]

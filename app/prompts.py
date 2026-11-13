@@ -135,6 +135,28 @@ gebeurt niet.
 """
 
 
+def lead_already_saved(lead: dict) -> str:
+    """
+    Tells the advisor that this visitor's details were already passed on.
+    The transcript keeps only visible text, not the save_lead call, so
+    without this the model can't tell on a later turn that it already did
+    it, and "corrects" itself and saves again.
+    """
+    details = ", ".join(
+        f"{label}: {lead[key]}"
+        for key, label in (("name", "naam"), ("email", "e-mail"), ("phone", "telefoon"),
+                           ("contact_preference", "voorkeur"))
+        if lead.get(key)
+    )
+    return (
+        "## Al doorgegeven\n"
+        "In dit gesprek heb je de gegevens van de bezoeker al met save_lead doorgegeven "
+        f"aan een opleidingsadviseur, en dat is gelukt ({details}). Zeg dus niet dat het "
+        "nog moet gebeuren of dat het eerder niet gelukt is. Roep save_lead alleen opnieuw "
+        "aan als de bezoeker iets wil wijzigen of aanvullen."
+    )
+
+
 def build_system_prompt(courses: list[dict], lead_capture: bool = False) -> str:
     courses_block = format_courses_block(courses)
     contact_section = CONTACT_WITH_LEAD_CAPTURE if lead_capture else CONTACT_EMAIL_ONLY

@@ -45,10 +45,10 @@ from app.enrollment import enforce_enrollment_intent
 from app.leads import SAVE_LEAD_TOOL, InvalidLead, clean_lead
 from app import trengo
 from app.notify import send_lead_email
-from app.prompts import WHATSAPP_BUTTON, build_system_prompt, fetch_courses
+from app.prompts import WHATSAPP_BUTTON, build_system_prompt, fetch_courses, lead_already_saved
 from app.rate_limit import RateLimiter, client_ip
 from app.storage import (
-    apply_schema, get_conversation, get_conversation_id, get_lead_ticket, record_consent,
+    apply_schema, get_conversation, get_conversation_id, get_lead, get_lead_ticket, record_consent,
     save_lead, save_summary, save_transcript, set_lead_ticket,
 )
 from app.summarize import summarize_conversation
@@ -214,6 +214,13 @@ def chat(req: ChatRequest, request: Request, background: BackgroundTasks):
 
     courses = fetch_courses(DATABASE_URL)
     system_prompt = build_system_prompt(courses, lead_capture=LEAD_CAPTURE_ENABLED)
+    # The system prompt (instructions + full course list) is identical for
+    # every request until the course data changes, so cache it. Per-visitor
+    # context goes in a block after it, outside the cache.
+    system = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
+    existing_lead = get_lead(DATABASE_URL, session_id) if LEAD_CAPTURE_ENABLED else None
+    if existing_lead:
+        system.append({"type": "text", "text": lead_already_saved(existing_lead)})
 
     saved_lead = {}
 
@@ -245,13 +252,7 @@ def chat(req: ChatRequest, request: Request, background: BackgroundTasks):
                 betas=[FALLBACK_BETA],
                 fallbacks="default",
                 **({"tools": [SAVE_LEAD_TOOL]} if LEAD_CAPTURE_ENABLED else {}),
-                # The system prompt (instructions + full course list) is identical
-                # for every request until the course data changes, so cache it.
-                system=[{
-                    "type": "text",
-                    "text": system_prompt,
-                    "cache_control": {"type": "ephemeral"},
-                }],
+                system=system,
                 messages=messages,
             )
             if response.stop_reason == "refusal":
