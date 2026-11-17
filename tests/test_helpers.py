@@ -165,3 +165,11 @@ def test_advice_call_can_be_booked():
         prompt = build_system_prompt([], lead_capture=lead_capture)
         assert "\n" + ADVICE_CALL_BUTTON + "\n" in prompt  # a button on its own line
         assert "zelf een moment in de agenda van een groeicoach" in " ".join(prompt.split())
+
+
+def test_no_double_contact_after_booking_an_advice_call():
+    from app.prompts import build_system_prompt
+    from app.summarize import SUMMARY_SCHEMA
+    prompt = " ".join(build_system_prompt([], lead_capture=True).split())
+    assert "bied dan niet ook aan om de gegevens door te geven" in prompt
+    assert "adviesgesprek" in SUMMARY_SCHEMA["properties"]["summary"]["description"]

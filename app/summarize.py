@@ -58,7 +58,8 @@ SUMMARY_SCHEMA = {
             "description": (
                 "Twee tot vier zinnen voor een opleidingsadviseur: wie is de bezoeker, wat "
                 "zoekt die, welke twijfels of voorkeuren (locatie, datum, trainer, prijs) "
-                "kwamen naar voren, en waar is het gesprek geëindigd."
+                "kwamen naar voren, en waar is het gesprek geëindigd. Vermeld het als de bezoeker "
+                "een adviesgesprek met een groeicoach heeft ingepland of wil inplannen."
             ),
         },
         "recommended_course": {
