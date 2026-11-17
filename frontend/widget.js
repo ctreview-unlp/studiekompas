@@ -480,6 +480,19 @@
     }
   }
 
+  // Pages where the next step happens on the page itself (booking a call in
+  // the groeicoaches' calendar), so the open chat must not cover it.
+  const CLOSE_CHAT_ON = ["/adviesgesprek-aanvragen"];
+
+  function closesChat(url) {
+    try {
+      const path = new URL(url).pathname.replace(/\/$/, "");
+      return CLOSE_CHAT_ON.includes(path);
+    } catch {
+      return false;
+    }
+  }
+
   /** True if nothing but whitespace or punctuation shares the line with text[start:end]. */
   function isOnOwnLine(text, start, end) {
     const lineStart = text.lastIndexOf("\n", start - 1) + 1;
@@ -753,9 +766,10 @@
           if (target.startsWith("http")) {
             if (isSameSite(target)) {
               // Same tab, so the conversation is still there on the next page.
-              // On phones the open chat would cover that page, so close it.
+              // On phones the open chat would cover that page, so close it;
+              // on booking pages too, where the visitor acts on the page.
               link.addEventListener("click", () => {
-                if (window.matchMedia("(max-width: 600px)").matches) {
+                if (closesChat(target) || window.matchMedia("(max-width: 600px)").matches) {
                   this.isOpen = false;
                   this.saveSession();
                 }
